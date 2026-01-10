@@ -1,0 +1,6 @@
+year = 2026
+base_url = "https://example.com"
+
+name_column = "치과명"
+sheet_index = 0
+input_excel_path = "data/clinics.xlsx"
