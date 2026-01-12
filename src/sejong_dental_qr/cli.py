@@ -6,13 +6,16 @@ import argparse
 import functools
 import http.server
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Iterable
+
+import pandas as pd
 
 from .config import load_config
 from .delivery import create_delivery_packages
 from .id_map import load_id_map, save_id_map, update_id_map
-from .io_excel import read_clinic_names
+from .io_excel import read_clinic_records
 from .outbox import create_outbox, OutboxResult
 from .planner import build_changes
 from .qrgen import make_qr_named_png, make_qr_png
@@ -56,15 +59,19 @@ def main(argv: Iterable[str] | None = None) -> int:
 def _run_build(args: argparse.Namespace) -> int:
     cfg = load_config(args.config, allow_missing_base_url=args.skip_qr)
 
-    clinic_names = read_clinic_names(
+    clinic_records = read_clinic_records(
         cfg.input_excel_path,
         cfg.sheet_index,
         cfg.name_column,
+        cfg.address_column,
+        cfg.phone_column,
+        cfg.director_column,
+        cfg.homepage_column,
     )
-    logging.info("Loaded %s clinic name(s) from Excel.", len(clinic_names))
+    logging.info("Loaded %s clinic record(s) from Excel.", len(clinic_records))
 
     df_prev = load_id_map(cfg.id_map_path)
-    id_map_result = update_id_map(clinic_names, cfg.year, df_prev)
+    id_map_result = update_id_map(clinic_records, cfg.year, df_prev)
     df_next = id_map_result.data
     save_id_map(df_next, cfg.id_map_path)
 
@@ -77,6 +84,7 @@ def _run_build(args: argparse.Namespace) -> int:
     base_url = cfg.base_url.strip()
     url_prefix = _build_url_prefix(base_url, cfg.path_prefix) if base_url else ""
     qr_root = Path(cfg.output_root) / "qr"
+    build_timestamp = _now_iso()
 
     mapping_records: list[MappingRecord] = []
     active_count = 0
@@ -86,9 +94,26 @@ def _run_build(args: argparse.Namespace) -> int:
         clinic_id = str(row["clinic_id"])
         clinic_name = str(row["clinic_name"])
         status = str(row["status"]).upper()
+        address = _safe_str(row.get("address", ""))
+        phone = _safe_str(row.get("phone", ""))
+        director = _safe_str(row.get("director", ""))
+        homepage = _safe_str(row.get("homepage", ""))
 
         page_path = site_root / cfg.path_prefix / clinic_id / "index.html"
-        _write_text(page_path, render_clinic_page(cfg, clinic_id, clinic_name, status))
+        _write_text(
+            page_path,
+            render_clinic_page(
+                cfg,
+                clinic_id,
+                clinic_name,
+                status,
+                address,
+                phone,
+                director,
+                homepage,
+                build_timestamp,
+            ),
+        )
 
         url = f"{url_prefix}{clinic_id}/" if url_prefix else ""
 
@@ -96,7 +121,6 @@ def _run_build(args: argparse.Namespace) -> int:
         qr_named_path = ""
         if status == "ACTIVE":
             active_count += 1
-            qr_named_path = str(qr_root / f"{clinic_id}_named.png")
             if not args.skip_qr:
                 qr_path = str(qr_root / f"{clinic_id}.png")
                 make_qr_png(
@@ -107,6 +131,7 @@ def _run_build(args: argparse.Namespace) -> int:
                     cfg.qr_border,
                 )
                 if cfg.generate_qr_named:
+                    qr_named_path = str(qr_root / f"{clinic_id}_named.png")
                     font_path = cfg.caption_font_path.strip() or None
                     make_qr_named_png(
                         Path(qr_path),
@@ -123,6 +148,10 @@ def _run_build(args: argparse.Namespace) -> int:
                 clinic_name=clinic_name,
                 clinic_id=clinic_id,
                 status=status,
+                address=address,
+                phone=phone,
+                director=director,
+                homepage=homepage,
                 url=url,
                 page_path=str(page_path),
                 qr_path=qr_path,
@@ -147,7 +176,7 @@ def _run_build(args: argparse.Namespace) -> int:
         else:
             outbox_result = create_outbox(cfg, mapping_records, changes)
 
-    _log_summary(len(clinic_names), active_count, inactive_count, changes, outbox_result)
+    _log_summary(len(clinic_records), active_count, inactive_count, changes, outbox_result)
     return 0
 
 
@@ -173,6 +202,16 @@ def _write_text(path: Path, content: str) -> None:
 
 def _build_url_prefix(base_url: str, path_prefix: str) -> str:
     return f"{base_url.rstrip('/')}/{path_prefix.strip('/')}/"
+
+
+def _now_iso() -> str:
+    return datetime.now().astimezone().replace(microsecond=0).isoformat()
+
+
+def _safe_str(value: object) -> str:
+    if pd.isna(value):
+        return ""
+    return str(value)
 
 
 def _log_summary(

@@ -14,6 +14,10 @@ MAPPING_COLUMNS = [
     "clinic_name",
     "clinic_id",
     "status",
+    "address",
+    "phone",
+    "director",
+    "homepage",
     "url",
     "page_path",
     "qr_path",
@@ -33,6 +37,10 @@ class MappingRecord:
     clinic_name: str
     clinic_id: str
     status: str
+    address: str
+    phone: str
+    director: str
+    homepage: str
     url: str
     page_path: str
     qr_path: str
@@ -48,6 +56,10 @@ def write_mapping_csv(records: Iterable[MappingRecord], path: str | Path) -> Non
                 _safe_str(record.clinic_name),
                 _safe_str(record.clinic_id),
                 _safe_str(record.status),
+                _safe_str(record.address),
+                _safe_str(record.phone),
+                _safe_str(record.director),
+                _safe_str(record.homepage),
                 _safe_str(record.url),
                 _safe_str(record.page_path),
                 _safe_str(record.qr_path),

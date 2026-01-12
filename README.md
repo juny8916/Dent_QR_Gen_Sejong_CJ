@@ -21,7 +21,8 @@ sudo apt install -y fonts-noto-cjk
 
 - 파일 위치: `data/clinics.xlsx`
 - 첫 번째 시트(sheet_index=0) 사용
-- 헤더 컬럼명: `치과명`
+- 헤더 컬럼명: `치과명`, `주소`, `전화`, `대표원장`, `홈페이지`
+- 값은 비어있을 수 있지만, 헤더는 반드시 존재해야 합니다.
 
 ## 3) config.toml 설정
 
@@ -63,3 +64,5 @@ python -m sejong_dental_qr preview --port 8000
 `base_url`이 확정된 뒤에는 QR이 달라지므로 반드시 다시 `build`를 실행해 QR을 재생성하세요.
 
 `build` 이후에는 `output/outbox/zips`의 ZIP만 확인해 NEW/REACTIVATED 치과에 전달하면 됩니다.
+
+`홈페이지` 값이 `http://` 또는 `https://`로 시작하지 않으면 자동으로 `https://`를 붙여 링크합니다.

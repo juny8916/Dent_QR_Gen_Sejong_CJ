@@ -10,14 +10,25 @@ from typing import Iterable
 
 import pandas as pd
 
+from .io_excel import ClinicInput
 
-COLUMNS = [
+
+CORE_COLUMNS = [
     "clinic_id",
     "clinic_name",
     "status",
     "first_seen_at",
     "last_seen_at",
 ]
+
+EXTRA_COLUMNS = [
+    "address",
+    "phone",
+    "director",
+    "homepage",
+]
+
+COLUMNS = CORE_COLUMNS + EXTRA_COLUMNS
 
 
 @dataclass(frozen=True)
@@ -32,9 +43,12 @@ def load_id_map(path: str | Path) -> pd.DataFrame:
         return pd.DataFrame(columns=COLUMNS)
 
     df = pd.read_csv(csv_path, encoding="utf-8-sig", dtype=str, keep_default_na=False)
-    missing = [col for col in COLUMNS if col not in df.columns]
-    if missing:
-        raise ValueError(f"id_map is missing required columns: {', '.join(missing)}")
+    missing_core = [col for col in CORE_COLUMNS if col not in df.columns]
+    if missing_core:
+        raise ValueError(f"id_map is missing required columns: {', '.join(missing_core)}")
+    for col in EXTRA_COLUMNS:
+        if col not in df.columns:
+            df[col] = ""
     return df[COLUMNS].copy()
 
 
@@ -45,11 +59,12 @@ def save_id_map(df: pd.DataFrame, path: str | Path) -> None:
 
 
 def update_id_map(
-    clinic_names: Iterable[str],
+    clinic_records: Iterable[ClinicInput],
     year: int,
     existing_df: pd.DataFrame,
 ) -> IdMapResult:
-    names = list(clinic_names)
+    records = list(clinic_records)
+    names = [record.name for record in records]
     if len(names) != len(set(names)):
         raise ValueError("Duplicate clinic names provided to update_id_map")
 
@@ -57,15 +72,21 @@ def update_id_map(
     _check_duplicate_names(existing_df)
 
     active_names = set(names)
+    record_by_name = {record.name: record for record in records}
     prefix = f"SJ{year % 100:02d}-"
     max_number = _max_existing_number(existing_df["clinic_id"], prefix)
     now = _now_iso()
 
     updated_rows: list[dict[str, str]] = []
     for _, row in existing_df.iterrows():
-        name = row["clinic_name"]
-        status = "ACTIVE" if name in active_names else "INACTIVE"
+        name = _safe_str(row["clinic_name"])
+        record = record_by_name.get(name)
+        status = "ACTIVE" if record else "INACTIVE"
         last_seen_at = now if status == "ACTIVE" else _safe_str(row["last_seen_at"])
+        address = _merge_field(record.address if record else "", row.get("address", ""))
+        phone = _merge_field(record.phone if record else "", row.get("phone", ""))
+        director = _merge_field(record.director if record else "", row.get("director", ""))
+        homepage = _merge_field(record.homepage if record else "", row.get("homepage", ""))
         updated_rows.append(
             {
                 "clinic_id": _safe_str(row["clinic_id"]),
@@ -73,6 +94,10 @@ def update_id_map(
                 "status": status,
                 "first_seen_at": _safe_str(row["first_seen_at"]),
                 "last_seen_at": last_seen_at,
+                "address": address,
+                "phone": phone,
+                "director": director,
+                "homepage": homepage,
             }
         )
 
@@ -80,6 +105,7 @@ def update_id_map(
     new_names = sorted(active_names - existing_names)
     new_ids: list[str] = []
     for name in new_names:
+        record = record_by_name[name]
         max_number += 1
         clinic_id = f"{prefix}{max_number:04d}"
         new_ids.append(clinic_id)
@@ -90,6 +116,10 @@ def update_id_map(
                 "status": "ACTIVE",
                 "first_seen_at": now,
                 "last_seen_at": now,
+                "address": record.address,
+                "phone": record.phone,
+                "director": record.director,
+                "homepage": record.homepage,
             }
         )
 
@@ -98,9 +128,12 @@ def update_id_map(
 
 
 def _ensure_columns(df: pd.DataFrame) -> None:
-    missing = [col for col in COLUMNS if col not in df.columns]
-    if missing:
-        raise ValueError(f"id_map is missing required columns: {', '.join(missing)}")
+    missing_core = [col for col in CORE_COLUMNS if col not in df.columns]
+    if missing_core:
+        raise ValueError(f"id_map is missing required columns: {', '.join(missing_core)}")
+    for col in EXTRA_COLUMNS:
+        if col not in df.columns:
+            df[col] = ""
 
 
 def _check_duplicate_names(df: pd.DataFrame) -> None:
@@ -135,3 +168,9 @@ def _safe_str(value: object) -> str:
     if pd.isna(value):
         return ""
     return str(value)
+
+
+def _merge_field(new_value: str, old_value: object) -> str:
+    if new_value:
+        return new_value
+    return _safe_str(old_value)

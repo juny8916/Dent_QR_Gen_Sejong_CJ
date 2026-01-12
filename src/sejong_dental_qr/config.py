@@ -20,6 +20,10 @@ class AppConfig:
     input_excel_path: str
     sheet_index: int = 0
     name_column: str = "치과명"
+    address_column: str = "주소"
+    phone_column: str = "전화"
+    director_column: str = "대표원장"
+    homepage_column: str = "홈페이지"
     id_map_path: str = "data/id_map.csv"
     site_root: str = "docs"
     path_prefix: str = "c"
@@ -52,6 +56,18 @@ class AppConfig:
 
         if not _is_nonempty_str(self.name_column):
             errors.append("name_column must be a non-empty string")
+
+        if not _is_nonempty_str(self.address_column):
+            errors.append("address_column must be a non-empty string")
+
+        if not _is_nonempty_str(self.phone_column):
+            errors.append("phone_column must be a non-empty string")
+
+        if not _is_nonempty_str(self.director_column):
+            errors.append("director_column must be a non-empty string")
+
+        if not _is_nonempty_str(self.homepage_column):
+            errors.append("homepage_column must be a non-empty string")
 
         if not _is_nonempty_str(self.id_map_path):
             errors.append("id_map_path must be a non-empty string")
@@ -129,6 +145,10 @@ def load_config(path: str | Path, allow_missing_base_url: bool = False) -> AppCo
         input_excel_path=_read_str(data, "input_excel_path"),
         sheet_index=_read_int(data, "sheet_index", 0),
         name_column=_read_str(data, "name_column", "치과명"),
+        address_column=_read_str(data, "address_column", "주소"),
+        phone_column=_read_str(data, "phone_column", "전화"),
+        director_column=_read_str(data, "director_column", "대표원장"),
+        homepage_column=_read_str(data, "homepage_column", "홈페이지"),
         id_map_path=_read_str(data, "id_map_path", "data/id_map.csv"),
         site_root=_read_str(data, "site_root", "docs"),
         path_prefix=_read_str(data, "path_prefix", "c"),

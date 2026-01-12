@@ -98,6 +98,10 @@ def _load_mapping_csv(path: str | Path) -> list[MappingRecord]:
                     clinic_name=row.get("clinic_name", ""),
                     clinic_id=row.get("clinic_id", ""),
                     status=row.get("status", ""),
+                    address=row.get("address", ""),
+                    phone=row.get("phone", ""),
+                    director=row.get("director", ""),
+                    homepage=row.get("homepage", ""),
                     url=row.get("url", ""),
                     page_path=row.get("page_path", ""),
                     qr_path=row.get("qr_path", ""),
@@ -112,6 +116,10 @@ def _render_info(cfg: AppConfig, record: MappingRecord, created_at: str) -> str:
         f"치과명: {record.clinic_name}\n"
         f"식별코드: {record.clinic_id}\n"
         f"URL: {record.url}\n"
+        f"주소: {_display_or_dash(record.address)}\n"
+        f"전화: {_display_or_dash(record.phone)}\n"
+        f"대표원장: {_display_or_dash(record.director)}\n"
+        f"홈페이지: {_display_or_dash(record.homepage)}\n"
         f"안내: {cfg.message_active}\n"
         f"생성일: {created_at}\n"
     )
@@ -123,3 +131,7 @@ def _is_active(status: str) -> bool:
 
 def _now_iso() -> str:
     return datetime.now().astimezone().replace(microsecond=0).isoformat()
+
+
+def _display_or_dash(value: str) -> str:
+    return value if value else "-"
