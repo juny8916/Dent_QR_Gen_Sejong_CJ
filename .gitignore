@@ -5,3 +5,4 @@ __pycache__/
 *.pyd
 *.egg-info/
 output/
+"git 토큰"

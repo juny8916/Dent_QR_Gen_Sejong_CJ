@@ -11,6 +11,12 @@ pip install -U pip
 pip install -e .
 ```
 
+폰트 설치(캡션 포함 QR 생성용):
+
+```bash
+sudo apt install -y fonts-noto-cjk
+```
+
 ## 2) 입력 엑셀 준비
 
 - 파일 위치: `data/clinics.xlsx`
@@ -42,8 +48,9 @@ python -m sejong_dental_qr preview --port 8000
 ## 산출물 위치
 
 - 정적 사이트: `docs/`
-- QR 이미지: `output/qr/`
+- QR 이미지: `output/qr/<id>.png`, `output/qr/<id>_named.png`
 - 전달 패키지: `output/delivery/`
+- Outbox: `output/outbox/sendlist.csv`, `output/outbox/zips/*.zip`
 - 매핑 CSV: `output/mapping.csv`
 - 변경 내역 CSV: `output/changes.csv`
 
@@ -54,3 +61,5 @@ python -m sejong_dental_qr preview --port 8000
 ## 운영 팁
 
 `base_url`이 확정된 뒤에는 QR이 달라지므로 반드시 다시 `build`를 실행해 QR을 재생성하세요.
+
+`build` 이후에는 `output/outbox/zips`의 ZIP만 확인해 NEW/REACTIVATED 치과에 전달하면 됩니다.

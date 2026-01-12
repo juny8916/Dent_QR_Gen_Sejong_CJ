@@ -13,8 +13,9 @@ from .config import load_config
 from .delivery import create_delivery_packages
 from .id_map import load_id_map, save_id_map, update_id_map
 from .io_excel import read_clinic_names
+from .outbox import create_outbox, OutboxResult
 from .planner import build_changes
-from .qrgen import make_qr_png
+from .qrgen import make_qr_named_png, make_qr_png
 from .renderer import render_404, render_clinic_page, render_root_index
 from .report import MappingRecord, write_changes_csv, write_mapping_csv
 
@@ -92,8 +93,10 @@ def _run_build(args: argparse.Namespace) -> int:
         url = f"{url_prefix}{clinic_id}/" if url_prefix else ""
 
         qr_path = ""
+        qr_named_path = ""
         if status == "ACTIVE":
             active_count += 1
+            qr_named_path = str(qr_root / f"{clinic_id}_named.png")
             if not args.skip_qr:
                 qr_path = str(qr_root / f"{clinic_id}.png")
                 make_qr_png(
@@ -103,6 +106,15 @@ def _run_build(args: argparse.Namespace) -> int:
                     cfg.qr_box_size,
                     cfg.qr_border,
                 )
+                if cfg.generate_qr_named:
+                    font_path = cfg.caption_font_path.strip() or None
+                    make_qr_named_png(
+                        Path(qr_path),
+                        clinic_name,
+                        Path(qr_named_path),
+                        font_path,
+                        cfg.caption_font_size,
+                    )
         else:
             inactive_count += 1
 
@@ -114,6 +126,7 @@ def _run_build(args: argparse.Namespace) -> int:
                 url=url,
                 page_path=str(page_path),
                 qr_path=qr_path,
+                qr_named_path=qr_named_path,
             )
         )
 
@@ -127,7 +140,14 @@ def _run_build(args: argparse.Namespace) -> int:
         else:
             create_delivery_packages(cfg, mapping_records)
 
-    _log_summary(len(clinic_names), active_count, inactive_count, changes)
+    outbox_result: OutboxResult | None = None
+    if cfg.generate_outbox:
+        if args.skip_qr:
+            logging.warning("Outbox skipped because --skip-qr was set.")
+        else:
+            outbox_result = create_outbox(cfg, mapping_records, changes)
+
+    _log_summary(len(clinic_names), active_count, inactive_count, changes, outbox_result)
     return 0
 
 
@@ -160,6 +180,7 @@ def _log_summary(
     active: int,
     inactive: int,
     changes: list,
+    outbox_result: OutboxResult | None,
 ) -> None:
     counts = {"NEW": 0, "DEACTIVATED": 0, "REACTIVATED": 0, "UNCHANGED": 0}
     for change in changes:
@@ -173,3 +194,9 @@ def _log_summary(
         counts["REACTIVATED"],
         counts["UNCHANGED"],
     )
+    if outbox_result:
+        logging.info(
+            "Outbox: targets=%s zips=%s",
+            outbox_result.targets,
+            outbox_result.zips_created,
+        )

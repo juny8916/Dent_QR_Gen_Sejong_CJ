@@ -17,6 +17,7 @@ MAPPING_COLUMNS = [
     "url",
     "page_path",
     "qr_path",
+    "qr_named_path",
 ]
 
 CHANGES_COLUMNS = [
@@ -35,6 +36,7 @@ class MappingRecord:
     url: str
     page_path: str
     qr_path: str
+    qr_named_path: str
 
 
 def write_mapping_csv(records: Iterable[MappingRecord], path: str | Path) -> None:
@@ -49,6 +51,7 @@ def write_mapping_csv(records: Iterable[MappingRecord], path: str | Path) -> Non
                 _safe_str(record.url),
                 _safe_str(record.page_path),
                 _safe_str(record.qr_path),
+                _safe_str(record.qr_named_path),
             ]
             for record in records
         ),

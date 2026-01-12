@@ -30,7 +30,13 @@ class AppConfig:
     qr_error_correction: str = "H"
     qr_box_size: int = 10
     qr_border: int = 4
+    generate_qr_named: bool = True
+    caption_font_path: str = ""
+    caption_font_size: int = 28
     generate_delivery: bool = True
+    generate_outbox: bool = True
+    outbox_mode: str = "changed"
+    outbox_root: str = "output/outbox"
 
     def validate(self, allow_missing_base_url: bool = False) -> None:
         errors: list[str] = []
@@ -70,6 +76,26 @@ class AppConfig:
 
         if not isinstance(self.generate_delivery, bool):
             errors.append("generate_delivery must be a boolean")
+
+        if not isinstance(self.generate_qr_named, bool):
+            errors.append("generate_qr_named must be a boolean")
+
+        if not isinstance(self.generate_outbox, bool):
+            errors.append("generate_outbox must be a boolean")
+
+        if not isinstance(self.caption_font_path, str):
+            errors.append("caption_font_path must be a string")
+
+        if not _is_int(self.caption_font_size) or self.caption_font_size <= 0:
+            errors.append("caption_font_size must be a positive integer")
+
+        if not _is_nonempty_str(self.outbox_mode):
+            errors.append("outbox_mode must be a non-empty string")
+        elif self.outbox_mode != "changed":
+            errors.append("outbox_mode must be 'changed'")
+
+        if not _is_nonempty_str(self.outbox_root):
+            errors.append("outbox_root must be a non-empty string")
 
         if not _is_nonempty_str(self.qr_error_correction):
             errors.append("qr_error_correction must be a non-empty string")
@@ -114,6 +140,12 @@ def load_config(path: str | Path, allow_missing_base_url: bool = False) -> AppCo
         qr_box_size=_read_int(data, "qr_box_size", 10),
         qr_border=_read_int(data, "qr_border", 4),
         generate_delivery=_read_bool(data, "generate_delivery", True),
+        generate_qr_named=_read_bool(data, "generate_qr_named", True),
+        caption_font_path=_read_str(data, "caption_font_path", ""),
+        caption_font_size=_read_int(data, "caption_font_size", 28),
+        generate_outbox=_read_bool(data, "generate_outbox", True),
+        outbox_mode=_read_str(data, "outbox_mode", "changed"),
+        outbox_root=_read_str(data, "outbox_root", "output/outbox"),
     )
     config.validate(allow_missing_base_url=allow_missing_base_url)
     return config

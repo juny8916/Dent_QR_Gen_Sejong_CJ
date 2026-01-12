@@ -5,14 +5,14 @@ from __future__ import annotations
 import csv
 from dataclasses import dataclass
 from datetime import datetime
+import logging
 from pathlib import Path
 import shutil
 from typing import Iterable
 
-from slugify import slugify
-
 from .config import AppConfig
 from .report import MappingRecord
+from .utils import slugify_name
 
 
 @dataclass(frozen=True)
@@ -37,13 +37,29 @@ def create_delivery_packages(
         if not record.qr_path:
             raise ValueError(f"Missing qr_path for ACTIVE clinic: {record.clinic_id}")
 
-        slug = _slugify(record.clinic_name)
+        slug = slugify_name(record.clinic_name)
         target_dir = root / f"{record.clinic_id}_{slug}"
         target_dir.mkdir(parents=True, exist_ok=True)
 
         qr_source = Path(record.qr_path)
         qr_target = target_dir / "qr.png"
         shutil.copy2(qr_source, qr_target)
+
+        if record.qr_named_path:
+            named_source = Path(record.qr_named_path)
+            if named_source.exists():
+                named_target = target_dir / "qr_named.png"
+                shutil.copy2(named_source, named_target)
+            else:
+                logging.warning(
+                    "qr_named.png not found for clinic_id=%s",
+                    record.clinic_id,
+                )
+        else:
+            logging.warning(
+                "Missing qr_named_path for clinic_id=%s",
+                record.clinic_id,
+            )
 
         info_path = target_dir / "info.txt"
         info_path.write_text(
@@ -85,6 +101,7 @@ def _load_mapping_csv(path: str | Path) -> list[MappingRecord]:
                     url=row.get("url", ""),
                     page_path=row.get("page_path", ""),
                     qr_path=row.get("qr_path", ""),
+                    qr_named_path=row.get("qr_named_path", ""),
                 )
             )
         return records
@@ -98,11 +115,6 @@ def _render_info(cfg: AppConfig, record: MappingRecord, created_at: str) -> str:
         f"안내: {cfg.message_active}\n"
         f"생성일: {created_at}\n"
     )
-
-
-def _slugify(name: str) -> str:
-    value = slugify(name)
-    return value if value else "clinic"
 
 
 def _is_active(status: str) -> bool:
