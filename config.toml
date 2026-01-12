@@ -6,6 +6,9 @@ address_column = "주소"
 phone_column = "전화"
 director_column = "대표원장"
 homepage_column = "홈페이지"
+clinics_source = "local"
+clinics_xlsx_url = ""
+clinics_hash_path = "data/clinics.sha256"
 sheet_index = 0
 input_excel_path = "data/clinics.xlsx"
 

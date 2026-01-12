@@ -18,6 +18,9 @@ class AppConfig:
     year: int
     base_url: str
     input_excel_path: str
+    clinics_source: str = "local"
+    clinics_xlsx_url: str = ""
+    clinics_hash_path: str = "data/clinics.sha256"
     sheet_index: int = 0
     name_column: str = "치과명"
     address_column: str = "주소"
@@ -50,6 +53,19 @@ class AppConfig:
 
         if not _is_nonempty_str(self.input_excel_path):
             errors.append("input_excel_path must be a non-empty string")
+
+        if not _is_nonempty_str(self.clinics_source):
+            errors.append("clinics_source must be a non-empty string")
+        elif self.clinics_source not in {"local", "url"}:
+            errors.append("clinics_source must be 'local' or 'url'")
+
+        if not isinstance(self.clinics_xlsx_url, str):
+            errors.append("clinics_xlsx_url must be a string")
+        elif self.clinics_source == "url" and not self.clinics_xlsx_url.strip():
+            errors.append("clinics_xlsx_url is required when clinics_source is 'url'")
+
+        if not _is_nonempty_str(self.clinics_hash_path):
+            errors.append("clinics_hash_path must be a non-empty string")
 
         if not _is_int(self.sheet_index) or self.sheet_index < 0:
             errors.append("sheet_index must be a non-negative integer")
@@ -143,6 +159,9 @@ def load_config(path: str | Path, allow_missing_base_url: bool = False) -> AppCo
         year=_read_int(data, "year"),
         base_url=_read_str(data, "base_url", ""),
         input_excel_path=_read_str(data, "input_excel_path"),
+        clinics_source=_read_str(data, "clinics_source", "local"),
+        clinics_xlsx_url=_read_str(data, "clinics_xlsx_url", ""),
+        clinics_hash_path=_read_str(data, "clinics_hash_path", "data/clinics.sha256"),
         sheet_index=_read_int(data, "sheet_index", 0),
         name_column=_read_str(data, "name_column", "치과명"),
         address_column=_read_str(data, "address_column", "주소"),

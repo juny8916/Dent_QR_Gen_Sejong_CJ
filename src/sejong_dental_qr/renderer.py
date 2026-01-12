@@ -20,6 +20,23 @@ def render_404(cfg: AppConfig) -> str:
     return _render_page(cfg, title="유효하지 않은 코드", body=body)
 
 
+def render_outbox_index(cfg: AppConfig, build_timestamp: str, zip_names: list[str]) -> str:
+    items = "".join(
+        f"<li><a href=\"zips/{html.escape(name, quote=True)}\">{html.escape(name)}</a></li>"
+        for name in zip_names
+    )
+    if not items:
+        items = "<li>대상 없음</li>"
+
+    body = (
+        "<h1>Outbox 다운로드</h1>"
+        f"<p class=\"meta\">최종 업데이트: {html.escape(build_timestamp)}</p>"
+        "<p><a href=\"sendlist.csv\">sendlist.csv 다운로드</a></p>"
+        f"<ul class=\"zip-list\">{items}</ul>"
+    )
+    return _render_page(cfg, title="Outbox 다운로드", body=body)
+
+
 def render_clinic_page(
     cfg: AppConfig,
     clinic_id: str,
@@ -107,6 +124,8 @@ def _render_page(cfg: AppConfig, title: str, body: str) -> str:
         ".value{color:#111;word-break:break-word;}"
         ".meta{color:#555;font-size:0.95rem;margin-top:14px;}"
         ".meta div{margin-bottom:6px;}"
+        ".zip-list{padding-left:18px;}"
+        ".zip-list li{margin:6px 0;}"
         "@media (min-width:768px){"
         "h1{font-size:2rem;}"
         ".wrap{padding:40px 24px;}"
