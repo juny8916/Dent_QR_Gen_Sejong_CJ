@@ -10,9 +10,10 @@ from .config import AppConfig
 
 def render_root_index(cfg: AppConfig) -> str:
     body = (
-        "<div class=\"card\">"
-        "<h1>QR 전용 안내(목록 없음)</h1>"
-        "<p>이 페이지는 치과별 QR 코드 전용 안내 페이지입니다.</p>"
+        "<div class=\"card empty-state\">"
+        "<div class=\"icon-area\">QR</div>"
+        "<h1>안내 페이지</h1>"
+        "<p>치과별 QR 코드 전용 안내 페이지입니다.<br>개별 QR 코드를 스캔해주세요.</p>"
         "</div>"
     )
     return _render_page(cfg, title="QR 안내", body=body)
@@ -20,27 +21,36 @@ def render_root_index(cfg: AppConfig) -> str:
 
 def render_404(cfg: AppConfig) -> str:
     body = (
-        "<div class=\"card\">"
+        "<div class=\"card empty-state error\">"
+        "<div class=\"icon-area\">!</div>"
         "<h1>유효하지 않은 코드</h1>"
-        "<p>요청하신 페이지를 찾을 수 없습니다.</p>"
+        "<p>요청하신 페이지를 찾을 수 없거나<br>잘못된 접근입니다.</p>"
         "</div>"
     )
-    return _render_page(cfg, title="유효하지 않은 코드", body=body)
+    return _render_page(cfg, title="페이지 없음", body=body)
 
 
 def render_outbox_index(cfg: AppConfig, build_timestamp: str, zip_names: list[str]) -> str:
     items = "".join(
-        f"<li><a href=\"zips/{html.escape(name, quote=True)}\">{html.escape(name)}</a></li>"
+        f"<li><a href=\"zips/{html.escape(name, quote=True)}\" class=\"file-link\">"
+        f"<span class=\"file-icon\">ZIP</span> {html.escape(name)}</a></li>"
         for name in zip_names
     )
     if not items:
-        items = "<li>대상 없음</li>"
+        items = "<li class=\"empty-list\">다운로드 가능한 파일이 없습니다.</li>"
 
     body = (
-        "<h1>Outbox 다운로드</h1>"
-        f"<p class=\"meta\">최종 업데이트: {html.escape(build_timestamp)}</p>"
-        "<p><a href=\"sendlist.csv\">sendlist.csv 다운로드</a></p>"
+        "<div class=\"card\">"
+        "<h1 class=\"page-title\">Outbox 다운로드</h1>"
+        f"<p class=\"meta-info\">최종 업데이트: {html.escape(build_timestamp)}</p>"
+        "<div class=\"action-area\">"
+        "<a href=\"sendlist.csv\" class=\"btn-primary\">sendlist.csv 다운로드</a>"
+        "</div>"
+        "</div>"
+        "<div class=\"card\">"
+        "<h2 class=\"section-title\">파일 목록</h2>"
         f"<ul class=\"zip-list\">{items}</ul>"
+        "</div>"
     )
     return _render_page(cfg, title="Outbox 다운로드", body=body)
 
@@ -58,12 +68,13 @@ def render_clinic_page(
 ) -> str:
     status_upper = str(status).upper()
     is_active = status_upper == "ACTIVE"
-    badge_text = "정회원" if is_active else "비회원(확인되지 않음)"
+    badge_text = "정회원" if is_active else "미확인"
     validity = f"{cfg.year}-01-01 ~ {cfg.year}-12-31"
 
     josa = _choose_josa(clinic_name)
     member_line = (
-        f"({clinic_name}){josa} {cfg.year} '세종특별자치시 치과의사회' 정회원 입니다."
+        f"<strong>{html.escape(clinic_name)}</strong>{josa} {cfg.year}년<br>"
+        "<strong>'세종특별자치시 치과의사회'</strong> 정회원입니다."
     )
     sub_line = "세종시 치과의사회는 시민의 구강건강을 지키는 공식 치과의사 단체입니다."
     warning_line = "현재 정회원으로 확인되지 않습니다."
@@ -72,90 +83,92 @@ def render_clinic_page(
     safe_badge = html.escape(badge_text)
     safe_validity = html.escape(validity)
     safe_updated = html.escape(build_timestamp)
-    safe_id = html.escape(clinic_id)
 
-    safe_member_line = html.escape(member_line)
     safe_sub_line = html.escape(sub_line)
     safe_warning_line = html.escape(warning_line)
     safe_inactive_message = html.escape(cfg.message_inactive)
 
     address_html = html.escape(_display_or_dash(address))
     director_html = html.escape(_display_or_dash(director))
-
     phone_html = html.escape(_display_or_dash(phone))
     homepage_html = _render_homepage(homepage)
 
     asset_base = _asset_base(cfg)
-    kda_logo = html.escape(f"{asset_base}assets/logos/kda.svg", quote=True)
-    sejong_logo = html.escape(f"{asset_base}assets/logos/sejong.svg", quote=True)
+    kda_logo = html.escape(f"{asset_base}assets/logos/kda.jpg", quote=True)
+    sejong_logo = html.escape(f"{asset_base}assets/logos/sejong.jpg", quote=True)
 
     if is_active:
         top_message = (
-            f"<p class=\"lead\">{safe_member_line}</p>"
-            f"<p class=\"support\">{safe_sub_line}</p>"
+            "<div class=\"status-message success\">"
+            f"<p class=\"main-msg\">{member_line}</p>"
+            f"<p class=\"sub-msg\">{safe_sub_line}</p>"
+            "</div>"
         )
+        badge_class = "active"
     else:
         top_message = (
-            f"<p class=\"lead warning\">{safe_warning_line}</p>"
-            f"<p class=\"support\">{safe_inactive_message}</p>"
+            "<div class=\"status-message warning\">"
+            f"<p class=\"main-msg\">{safe_warning_line}</p>"
+            f"<p class=\"sub-msg\">{safe_inactive_message}</p>"
+            "</div>"
         )
+        badge_class = "inactive"
 
     body = (
-        "<div class=\"page\">"
-        "<header class=\"card header\">"
+        "<div class=\"page-container\">"
+        "<header class=\"card header-card\">"
+        "<div class=\"header-top\">"
         "<div class=\"logos\">"
-        f"<img class=\"logo\" src=\"{kda_logo}\" alt=\"대한치과의사협회 로고\">"
-        f"<img class=\"logo\" src=\"{sejong_logo}\" alt=\"세종시 로고\">"
+        f"<img class=\"logo\" src=\"{kda_logo}\" alt=\"대한치과의사협회\">"
+        f"<img class=\"logo\" src=\"{sejong_logo}\" alt=\"세종시치과의사회\">"
         "</div>"
-        f"<span class=\"badge {'active' if is_active else 'inactive'}\">{safe_badge}</span>"
-        "</header>"
-        "<section class=\"card\">"
+        f"<span class=\"badge {badge_class}\">{safe_badge}</span>"
+        "</div>"
         f"{top_message}"
-        "</section>"
-        "<section class=\"card\">"
+        "</header>"
+        "<section class=\"card info-card\">"
         "<h2 class=\"section-title\">치과 정보</h2>"
-        "<div class=\"info-row\">"
+        "<div class=\"info-grid\">"
+        "<div class=\"info-item\">"
         "<span class=\"label\">치과명</span>"
-        f"<span class=\"value\">{safe_name}</span>"
+        f"<span class=\"value highlight\">{safe_name}</span>"
         "</div>"
-        "<div class=\"info-row\">"
+        "<div class=\"info-item\">"
         "<span class=\"label\">대표원장</span>"
         f"<span class=\"value\">{director_html}</span>"
         "</div>"
-        "<div class=\"info-row\">"
+        "<div class=\"info-item\">"
         "<span class=\"label\">주소</span>"
         f"<span class=\"value\">{address_html}</span>"
         "</div>"
-        "<details class=\"details\">"
-        "<summary>추가 정보(선택)</summary>"
-        "<div class=\"detail-row\">"
-        "<span class=\"label\">전화</span>"
-        f"<span class=\"value\">{phone_html}</span>"
+        "<div class=\"info-item\">"
+        "<span class=\"label\">전화번호</span>"
+        f"<span class=\"value phone\">{phone_html}</span>"
         "</div>"
-        "<div class=\"detail-row\">"
+        "<div class=\"info-item\">"
         "<span class=\"label\">홈페이지</span>"
         f"<span class=\"value\">{homepage_html}</span>"
         "</div>"
-        "</details>"
+        "</div>"
         "</section>"
-        "<section class=\"card\">"
+        "<section class=\"card value-card\">"
         "<h2 class=\"section-title\">세종시 치과의사회가 보증하는 가치</h2>"
         "<ul class=\"checklist\">"
-        "<li>윤리 진료 준수</li>"
-        "<li>지속적인 학술 활동: 정기 학술대회 및 최신 치료 교육 이수</li>"
-        "<li>지역사회 공헌: 시민 구강검진, 취약계층 봉사활동 참여</li>"
+        "<li><strong>윤리 진료 준수</strong><br><span>과잉진료 없는 정직한 치료</span></li>"
+        "<li><strong>지속적인 학술 활동</strong><br><span>정기 학술대회 및 최신 임상 교육 이수</span></li>"
+        "<li><strong>지역사회 공헌</strong><br><span>시민 구강검진, 취약계층 봉사활동 참여</span></li>"
         "</ul>"
-        "<p class=\"emphasis\">세종시 치과의사회는 회원 한 분 한 분의 전문성과 책임감으로 "
-        "세종시 치과 의료의 기준을 만들어갑니다.</p>"
+        "<div class=\"emphasis-box\">"
+        "<p>회원 한 분 한 분의 전문성과 책임감으로<br>세종시 치과 의료의 기준을 만들어갑니다.</p>"
+        "</div>"
         "</section>"
-        "<section class=\"card\">"
+        "<section class=\"card link-card\">"
         "<h2 class=\"section-title\">관련 링크</h2>"
         f"{_render_external_links()}"
         "</section>"
-        "<footer class=\"foot\">"
-        f"<span>유효기간: {safe_validity}</span>"
-        f"<span>최종 업데이트: {safe_updated}</span>"
-        f"<span>확인 코드: {safe_id}</span>"
+        "<footer class=\"footer\">"
+        f"<p class=\"validity\">유효기간: {safe_validity}</p>"
+        f"<p class=\"updated\">정보 업데이트: {safe_updated}</p>"
         "</footer>"
         "</div>"
     )
@@ -165,6 +178,71 @@ def render_clinic_page(
 def _render_page(cfg: AppConfig, title: str, body: str) -> str:
     safe_title = html.escape(title)
     robots = _render_robots(cfg.noindex)
+
+    css = (
+        ":root{"
+        "--primary:#2563eb;--primary-dark:#1e40af;--bg-color:#f8fafc;"
+        "--card-bg:#ffffff;--text-main:#1e293b;--text-sub:#64748b;"
+        "--border:#e2e8f0;--success-bg:#ecfdf5;--success-text:#047857;"
+        "--warning-bg:#fef2f2;--warning-text:#b91c1c;"
+        "--shadow:0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);"
+        "}"
+        "*{box-sizing:border-box}body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,system-ui,Roboto,sans-serif;line-height:1.6;margin:0;background:var(--bg-color);color:var(--text-main);-webkit-text-size-adjust:100%}"
+        ".wrap{max-width:600px;margin:0 auto;padding:20px 16px}"
+        "h1,h2,p{margin:0}a{text-decoration:none;color:inherit}"
+        ".page-container{display:flex;flex-direction:column;gap:16px}"
+        ".section-title{font-size:1.1rem;font-weight:700;color:var(--text-main);margin-bottom:12px;padding-left:4px}"
+        ".card{background:var(--card-bg);border-radius:16px;padding:24px 20px;box-shadow:var(--shadow);border:1px solid rgba(0,0,0,0.02)}"
+        ".header-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px}"
+        ".logos{display:flex;align-items:center;gap:12px}"
+        ".logo{height:36px;width:auto;object-fit:contain}"
+        ".badge{font-size:0.85rem;font-weight:700;padding:6px 12px;border-radius:20px;letter-spacing:-0.5px;white-space:nowrap}"
+        ".badge.active{background:var(--success-bg);color:var(--success-text)}"
+        ".badge.inactive{background:var(--warning-bg);color:var(--warning-text)}"
+        ".status-message{text-align:left;padding-top:4px}"
+        ".main-msg{font-size:1.15rem;font-weight:400;color:var(--text-main);line-height:1.5;margin-bottom:8px}"
+        ".main-msg strong{font-weight:700;color:var(--primary-dark)}"
+        ".sub-msg{font-size:0.9rem;color:var(--text-sub)}"
+        ".status-message.warning .main-msg{color:var(--warning-text);font-weight:700}"
+        ".info-grid{display:flex;flex-direction:column;gap:16px}"
+        ".info-item{display:flex;flex-direction:column;gap:4px;border-bottom:1px solid var(--border);padding-bottom:12px}"
+        ".info-item:last-child{border-bottom:none;padding-bottom:0}"
+        ".label{font-size:0.85rem;color:var(--text-sub);font-weight:500}"
+        ".value{font-size:1rem;color:var(--text-main);font-weight:500;word-break:keep-all}"
+        ".value.highlight{font-size:1.1rem;font-weight:700}"
+        ".value.phone{font-family:monospace,sans-serif;letter-spacing:0.5px;font-weight:600}"
+        ".value a{color:var(--primary);font-weight:600}"
+        ".checklist{list-style:none;padding:0;margin:0}"
+        ".checklist li{position:relative;padding-left:28px;margin-bottom:16px}"
+        ".checklist li:last-child{margin-bottom:0}"
+        ".checklist li::before{content:'';position:absolute;left:0;top:4px;width:18px;height:18px;background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232563eb' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E\");background-repeat:no-repeat;background-position:center}"
+        ".checklist strong{display:block;color:var(--text-main);margin-bottom:2px}"
+        ".checklist span{font-size:0.9rem;color:var(--text-sub)}"
+        ".emphasis-box{margin-top:20px;background:#f1f5f9;padding:16px;border-radius:12px;text-align:center}"
+        ".emphasis-box p{font-size:0.9rem;color:var(--text-main);font-weight:600;line-height:1.5}"
+        ".link-list{display:grid;grid-template-columns:1fr 1fr;gap:12px}"
+        ".link-item{display:flex;flex-direction:column;align-items:center;text-align:center;background:#f8fafc;padding:12px;border-radius:12px;border:1px solid var(--border);transition:transform 0.2s}"
+        ".link-item:active{transform:scale(0.98)}"
+        ".link-item a{font-weight:600;font-size:0.95rem;color:var(--text-main);margin-bottom:4px;display:block;width:100%}"
+        ".link-url{font-size:0.75rem;color:var(--text-sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}"
+        ".footer{margin-top:24px;text-align:center;color:#94a3b8;font-size:0.8rem}"
+        ".footer p{margin-bottom:4px}"
+        ".empty-state{text-align:center;padding:40px 20px}"
+        ".icon-area{font-size:2rem;font-weight:900;color:#cbd5e1;margin-bottom:16px}"
+        ".empty-state.error .icon-area{color:#fca5a5}"
+        ".btn-primary{display:inline-block;background:var(--primary);color:white;padding:12px 20px;border-radius:8px;font-weight:600;margin-top:12px}"
+        ".zip-list{list-style:none;padding:0}"
+        ".zip-list li{margin-bottom:8px}"
+        ".file-link{display:flex;align-items:center;padding:10px;background:#f1f5f9;border-radius:8px;color:var(--text-main)}"
+        ".file-icon{background:var(--text-sub);color:white;font-size:0.7rem;padding:2px 6px;border-radius:4px;margin-right:8px;font-weight:700}"
+        "@media (min-width:640px){"
+        ".wrap{padding:40px 20px}"
+        ".info-grid{display:grid;grid-template-columns:auto 1fr;column-gap:24px;row-gap:16px}"
+        ".info-item{flex-direction:row;align-items:baseline;padding-bottom:16px}"
+        ".label{width:100px;flex-shrink:0}"
+        "}"
+    )
+
     return (
         "<!doctype html>"
         "<html lang=\"ko\">"
@@ -173,57 +251,7 @@ def _render_page(cfg: AppConfig, title: str, body: str) -> str:
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
         f"{robots}"
         f"<title>{safe_title}</title>"
-        "<style>"
-        ":root{color-scheme:light;}"
-        "body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;"
-        "line-height:1.6;margin:0;background:#f2f4f7;color:#1a1a1a;}"
-        ".wrap{max-width:720px;margin:0 auto;padding:20px 16px;}"
-        "h1{font-size:1.75rem;margin:0 0 10px;}"
-        "h2{font-size:1.2rem;margin:0 0 12px;}"
-        "p{margin:0 0 12px;}"
-        ".page{display:flex;flex-direction:column;gap:14px;}"
-        ".card{background:#fff;border-radius:16px;padding:16px 18px;"
-        "box-shadow:0 8px 20px rgba(15,23,42,0.08);}"
-        ".header{display:flex;align-items:center;justify-content:space-between;gap:12px;}"
-        ".logos{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}"
-        ".logo{height:32px;max-width:140px;object-fit:contain;}"
-        ".badge{display:inline-flex;align-items:center;justify-content:center;"
-        "padding:6px 12px;border-radius:999px;font-size:0.95rem;font-weight:700;}"
-        ".badge.active{background:#e6f4ea;color:#166534;}"
-        ".badge.inactive{background:#ffecec;color:#b00020;}"
-        ".lead{font-size:1.05rem;font-weight:700;color:#111;}"
-        ".lead.warning{color:#b00020;}"
-        ".support{color:#374151;font-size:0.98rem;}"
-        ".section-title{font-weight:700;color:#111;margin-bottom:8px;}"
-        ".info-row,.detail-row{display:flex;flex-direction:column;gap:6px;"
-        "padding:10px 0;border-bottom:1px solid #eef0f3;}"
-        ".info-row:last-of-type{border-bottom:none;}"
-        ".label{color:#4b5563;font-weight:600;font-size:0.95rem;}"
-        ".value{color:#111;word-break:break-word;}"
-        ".details{margin-top:10px;border-top:1px dashed #e5e7eb;padding-top:10px;}"
-        ".details summary{cursor:pointer;font-weight:600;color:#1f2937;}"
-        ".details[open] summary{margin-bottom:8px;}"
-        ".checklist{list-style:none;padding:0;margin:0 0 12px;}"
-        ".checklist li{padding-left:26px;position:relative;margin-bottom:8px;color:#111;}"
-        ".checklist li::before{content:\"✔\";position:absolute;left:0;top:0;color:#16a34a;}"
-        ".emphasis{font-weight:700;color:#1f2937;}"
-        ".link-list{display:flex;flex-direction:column;gap:10px;}"
-        ".link-item a{color:#1d4ed8;text-decoration:none;font-weight:600;}"
-        ".link-item a:hover{text-decoration:underline;}"
-        ".link-url{display:block;color:#6b7280;font-size:0.9rem;}"
-        ".foot{display:flex;flex-direction:column;gap:6px;color:#6b7280;font-size:0.9rem;"
-        "padding:4px 2px;}"
-        ".zip-list{padding-left:18px;}"
-        ".zip-list li{margin:6px 0;}"
-        "@media (min-width:720px){"
-        "h1{font-size:2.1rem;}"
-        "h2{font-size:1.3rem;}"
-        ".wrap{padding:32px 24px;}"
-        ".info-row,.detail-row{flex-direction:row;align-items:flex-start;}"
-        ".label{min-width:140px;}"
-        ".foot{flex-direction:row;gap:18px;flex-wrap:wrap;}"
-        "}"
-        "</style>"
+        f"<style>{css}</style>"
         "</head>"
         "<body>"
         "<main class=\"wrap\">"
@@ -261,9 +289,12 @@ def _render_homepage(value: str) -> str:
 
     safe_link = html.escape(link, quote=True)
     safe_display = html.escape(display)
+
+    display_clean = safe_display.replace("https://", "").replace("http://", "").rstrip("/")
+
     return (
         f"<a href=\"{safe_link}\" target=\"_blank\" rel=\"noopener noreferrer\">"
-        f"{safe_display}</a>"
+        f"{display_clean}</a>"
     )
 
 
@@ -276,12 +307,11 @@ def _render_external_links() -> str:
     for label, url in links:
         safe_label = html.escape(label)
         safe_url = html.escape(url, quote=True)
-        safe_display = html.escape(url)
         items.append(
             "<div class=\"link-item\">"
             f"<a href=\"{safe_url}\" target=\"_blank\" rel=\"noopener noreferrer\">"
             f"{safe_label}</a>"
-            f"<span class=\"link-url\">{safe_display}</span>"
+            f"<span class=\"link-url\">외부 링크 이동</span>"
             "</div>"
         )
     return "<div class=\"link-list\">" + "".join(items) + "</div>"
