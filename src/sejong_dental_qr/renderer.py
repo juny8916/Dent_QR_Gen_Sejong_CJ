@@ -161,7 +161,7 @@ def render_clinic_page(
         )
 
     address_value = (address or "").strip()
-    query = f"{clinic_name} {address}".strip() if address_value else clinic_name.strip()
+    query = address_value if address_value else clinic_name.strip()
     map_url = _naver_map_search_url(query)
     map_button = ""
     if map_url:
@@ -378,7 +378,7 @@ def _render_address_link(address: str, clinic_name: str) -> str:
     if not raw:
         return "-"
 
-    query = f"{clinic_name} {raw}".strip()
+    query = raw
     url = _naver_map_search_url(query)
     if not url:
         return html.escape(raw)
