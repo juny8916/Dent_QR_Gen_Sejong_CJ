@@ -3,9 +3,35 @@
 from __future__ import annotations
 
 import html
-from urllib.parse import urlparse
+import re
+from urllib.parse import urlparse, quote
 
 from .config import AppConfig
+
+
+ICON_PHONE = (
+    "<svg class=\"btn-ico\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" fill=\"none\""
+    " stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\">"
+    "<path d=\"M22 16.92V21a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07"
+    " 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 3 5.18 2 2 0 0 1 5 3h4.09"
+    " a2 2 0 0 1 2 1.72l.57 3.23a2 2 0 0 1-.45 1.73L10 11a16 16"
+    " 0 0 0 6.73 6.73l1.32-1.21a2 2 0 0 1 1.73-.45l3.23.57a2 2"
+    " 0 0 1 1.72 2z\"/></svg>"
+)
+
+ICON_MAP = (
+    "<svg class=\"btn-ico\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" fill=\"none\""
+    " stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\">"
+    "<path d=\"M12 21s7-4.35 7-10a7 7 0 0 0-14 0c0 5.65 7 10 7 10z\"/>"
+    "<circle cx=\"12\" cy=\"11\" r=\"3\"/></svg>"
+)
+
+ICON_SEAL = (
+    "<svg class=\"seal-ico\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" fill=\"none\""
+    " stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\">"
+    "<circle cx=\"12\" cy=\"12\" r=\"9\"/>"
+    "<path d=\"M8.5 12l2.5 2.5 4.5-4.5\"/></svg>"
+)
 
 
 def render_root_index(cfg: AppConfig) -> str:
@@ -44,7 +70,7 @@ def render_outbox_index(cfg: AppConfig, build_timestamp: str, zip_names: list[st
         "<h1 class=\"page-title\">Outbox 다운로드</h1>"
         f"<p class=\"meta-info\">최종 업데이트: {html.escape(build_timestamp)}</p>"
         "<div class=\"action-area\">"
-        "<a href=\"sendlist.csv\" class=\"btn-primary\">sendlist.csv 다운로드</a>"
+        "<a href=\"sendlist.csv\" class=\"btn btn-primary\">sendlist.csv 다운로드</a>"
         "</div>"
         "</div>"
         "<div class=\"card\">"
@@ -88,9 +114,9 @@ def render_clinic_page(
     safe_warning_line = html.escape(warning_line)
     safe_inactive_message = html.escape(cfg.message_inactive)
 
-    address_html = html.escape(_display_or_dash(address))
+    address_html = _render_address_link(address, clinic_name)
     director_html = html.escape(_display_or_dash(director))
-    phone_html = html.escape(_display_or_dash(phone))
+    phone_html = _render_tel_link(phone)
     homepage_html = _render_homepage(homepage)
 
     asset_base = _asset_base(cfg)
@@ -114,6 +140,40 @@ def render_clinic_page(
         )
         badge_class = "inactive"
 
+    seal_html = f"<span class=\"seal\">{ICON_SEAL}공식 인증</span>" if is_active else ""
+    cert_row = (
+        "<div class=\"cert-row\">"
+        "<div class=\"cert-badges\">"
+        f"<span class=\"badge {badge_class}\">{safe_badge}</span>"
+        f"{seal_html}"
+        "</div>"
+        f"<p class=\"validity-inline\">유효기간: {safe_validity}</p>"
+        "</div>"
+    )
+
+    tel_digits = _sanitize_tel(phone)
+    tel_button = ""
+    if tel_digits:
+        tel_href = html.escape(f"tel:{tel_digits}", quote=True)
+        tel_button = (
+            f"<a href=\"{tel_href}\" class=\"btn btn-primary\">"
+            f"{ICON_PHONE}<span>전화하기</span></a>"
+        )
+
+    address_value = (address or "").strip()
+    query = f"{clinic_name} {address}".strip() if address_value else clinic_name.strip()
+    map_url = _naver_map_search_url(query)
+    map_button = ""
+    if map_url:
+        map_href = html.escape(map_url, quote=True)
+        map_button = (
+            f"<a href=\"{map_href}\" class=\"btn btn-secondary\" target=\"_blank\""
+            f" rel=\"noopener noreferrer\">{ICON_MAP}<span>네이버 지도</span></a>"
+        )
+
+    cta_buttons = "".join(button for button in [tel_button, map_button] if button)
+    cta_row = f"<div class=\"cta-row\">{cta_buttons}</div>" if cta_buttons else ""
+
     body = (
         "<div class=\"page-container\">"
         "<header class=\"card header-card\">"
@@ -122,9 +182,10 @@ def render_clinic_page(
         f"<img class=\"logo\" src=\"{kda_logo}\" alt=\"대한치과의사협회\">"
         f"<img class=\"logo\" src=\"{sejong_logo}\" alt=\"세종시치과의사회\">"
         "</div>"
-        f"<span class=\"badge {badge_class}\">{safe_badge}</span>"
         "</div>"
+        f"{cert_row}"
         f"{top_message}"
+        f"{cta_row}"
         "</header>"
         "<section class=\"card info-card\">"
         "<h2 class=\"section-title\">치과 정보</h2>"
@@ -193,24 +254,41 @@ def _render_page(cfg: AppConfig, title: str, body: str) -> str:
         ".page-container{display:flex;flex-direction:column;gap:16px}"
         ".section-title{font-size:1.1rem;font-weight:700;color:var(--text-main);margin-bottom:12px;padding-left:4px}"
         ".card{background:var(--card-bg);border-radius:16px;padding:24px 20px;box-shadow:var(--shadow);border:1px solid rgba(0,0,0,0.02)}"
-        ".header-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px}"
+        ".header-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}"
         ".logos{display:flex;align-items:center;gap:12px}"
         ".logo{height:36px;width:auto;object-fit:contain}"
+        ".cert-row{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}"
+        ".cert-badges{display:flex;align-items:center;gap:8px;flex-wrap:wrap}"
         ".badge{font-size:0.85rem;font-weight:700;padding:6px 12px;border-radius:20px;letter-spacing:-0.5px;white-space:nowrap}"
         ".badge.active{background:var(--success-bg);color:var(--success-text)}"
         ".badge.inactive{background:var(--warning-bg);color:var(--warning-text)}"
-        ".status-message{text-align:left;padding-top:4px}"
-        ".main-msg{font-size:1.15rem;font-weight:400;color:var(--text-main);line-height:1.5;margin-bottom:8px}"
+        ".seal{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;border:1px dashed #1e40af;background:#eef2ff;color:#1e40af;font-size:0.8rem;font-weight:700}"
+        ".seal-ico{width:14px;height:14px}"
+        ".validity-inline{margin:0;font-size:0.85rem;color:var(--text-sub)}"
+        ".status-message{text-align:left;padding:12px 14px;border-radius:12px;border:1px solid var(--border)}"
+        ".status-message.success{background:var(--success-bg)}"
+        ".status-message.warning{background:var(--warning-bg)}"
+        ".main-msg{font-size:1.15rem;font-weight:400;color:var(--text-main);line-height:1.5;margin:0 0 6px 0}"
         ".main-msg strong{font-weight:700;color:var(--primary-dark)}"
-        ".sub-msg{font-size:0.9rem;color:var(--text-sub)}"
+        ".sub-msg{font-size:0.9rem;color:var(--text-sub);margin:0}"
         ".status-message.warning .main-msg{color:var(--warning-text);font-weight:700}"
+        ".cta-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}"
+        ".btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 14px;border-radius:12px;font-weight:700;font-size:0.95rem;border:1px solid transparent;width:100%}"
+        ".btn-ico{width:18px;height:18px}"
+        ".btn-primary{background:var(--primary);color:white}"
+        ".btn-primary:hover{background:var(--primary-dark)}"
+        ".btn-secondary{background:#eef2ff;color:#1e40af;border-color:#c7d2fe}"
+        ".btn-secondary:hover{background:#e0e7ff}"
+        "a:focus-visible,.btn:focus-visible{outline:2px solid var(--primary);outline-offset:2px}"
         ".info-grid{display:flex;flex-direction:column;gap:16px}"
         ".info-item{display:flex;flex-direction:column;gap:4px;border-bottom:1px solid var(--border);padding-bottom:12px}"
         ".info-item:last-child{border-bottom:none;padding-bottom:0}"
         ".label{font-size:0.85rem;color:var(--text-sub);font-weight:500}"
-        ".value{font-size:1rem;color:var(--text-main);font-weight:500;word-break:keep-all}"
+        ".value{font-size:1rem;color:var(--text-main);font-weight:500;overflow-wrap:anywhere;word-break:break-word}"
         ".value.highlight{font-size:1.1rem;font-weight:700}"
         ".value.phone{font-family:monospace,sans-serif;letter-spacing:0.5px;font-weight:600}"
+        ".tel-link,.map-link{color:var(--primary);font-weight:700}"
+        ".tel-link:hover,.map-link:hover{text-decoration:underline}"
         ".value a{color:var(--primary);font-weight:600}"
         ".checklist{list-style:none;padding:0;margin:0}"
         ".checklist li{position:relative;padding-left:28px;margin-bottom:16px}"
@@ -220,7 +298,7 @@ def _render_page(cfg: AppConfig, title: str, body: str) -> str:
         ".checklist span{font-size:0.9rem;color:var(--text-sub);line-height:1.25;display:block}"
         ".emphasis-box{margin-top:20px;background:#f1f5f9;padding:16px;border-radius:12px;text-align:center}"
         ".emphasis-box p{font-size:0.9rem;color:var(--text-main);font-weight:600;line-height:1.5}"
-        ".link-list{display:grid;grid-template-columns:1fr 1fr;gap:12px}"
+        ".link-list{display:grid;grid-template-columns:1fr;gap:12px}"
         ".link-item{display:flex;flex-direction:column;align-items:center;text-align:center;background:#f8fafc;padding:12px;border-radius:12px;border:1px solid var(--border);transition:transform 0.2s}"
         ".link-item:active{transform:scale(0.98)}"
         ".link-item a{font-weight:600;font-size:0.95rem;color:var(--text-main);margin-bottom:4px;display:block;width:100%}"
@@ -230,16 +308,18 @@ def _render_page(cfg: AppConfig, title: str, body: str) -> str:
         ".empty-state{text-align:center;padding:40px 20px}"
         ".icon-area{font-size:2rem;font-weight:900;color:#cbd5e1;margin-bottom:16px}"
         ".empty-state.error .icon-area{color:#fca5a5}"
-        ".btn-primary{display:inline-block;background:var(--primary);color:white;padding:12px 20px;border-radius:8px;font-weight:600;margin-top:12px}"
         ".zip-list{list-style:none;padding:0}"
         ".zip-list li{margin-bottom:8px}"
         ".file-link{display:flex;align-items:center;padding:10px;background:#f1f5f9;border-radius:8px;color:var(--text-main)}"
         ".file-icon{background:var(--text-sub);color:white;font-size:0.7rem;padding:2px 6px;border-radius:4px;margin-right:8px;font-weight:700}"
+        "@media (max-width:360px){.cta-row{grid-template-columns:1fr}}"
+        "@media (min-width:420px){.link-list{grid-template-columns:1fr 1fr}}"
         "@media (min-width:640px){"
         ".wrap{padding:40px 20px}"
         ".info-grid{display:grid;grid-template-columns:auto 1fr;column-gap:24px;row-gap:16px}"
         ".info-item{flex-direction:row;align-items:baseline;padding-bottom:16px}"
         ".label{width:100px;flex-shrink:0}"
+        ".cert-row{flex-direction:row;align-items:center;justify-content:space-between}"
         "}"
     )
 
@@ -266,6 +346,49 @@ def _render_robots(noindex: bool) -> str:
     if not noindex:
         return ""
     return "<meta name=\"robots\" content=\"noindex,nofollow\">"
+
+
+def _sanitize_tel(phone: str) -> str:
+    return re.sub(r"[^0-9+]", "", phone or "")
+
+
+def _render_tel_link(phone: str) -> str:
+    raw = (phone or "").strip()
+    if not raw:
+        return "-"
+
+    digits = _sanitize_tel(raw)
+    if not digits:
+        return html.escape(raw)
+
+    href = html.escape(f"tel:{digits}", quote=True)
+    display = html.escape(raw)
+    return f"<a href=\"{href}\" class=\"tel-link\">{display}</a>"
+
+
+def _naver_map_search_url(query: str) -> str:
+    cleaned = (query or "").strip()
+    if not cleaned:
+        return ""
+    return f"https://map.naver.com/v5/search/{quote(cleaned, safe='')}"
+
+
+def _render_address_link(address: str, clinic_name: str) -> str:
+    raw = (address or "").strip()
+    if not raw:
+        return "-"
+
+    query = f"{clinic_name} {raw}".strip()
+    url = _naver_map_search_url(query)
+    if not url:
+        return html.escape(raw)
+
+    safe_url = html.escape(url, quote=True)
+    safe_text = html.escape(raw)
+    return (
+        f"<a href=\"{safe_url}\" class=\"map-link\" target=\"_blank\" rel=\"noopener noreferrer\">"
+        f"{safe_text}</a>"
+    )
 
 
 def _display_or_dash(value: str) -> str:
