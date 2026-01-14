@@ -1,2 +1,3 @@
-﻿clinic_id,clinic_name,status,first_seen_at,last_seen_at
-SJ26-0001,세종강남치과,ACTIVE,2026-01-10T23:40:58+09:00,2026-01-12T13:56:26+09:00
+﻿clinic_id,clinic_name,status,first_seen_at,last_seen_at,address,phone,director,homepage
+SJ26-0001,세종강남치과,INACTIVE,2026-01-10T23:40:58+09:00,2026-01-12T13:56:26+09:00,,,,
+SJ26-0002,강남치과의원,ACTIVE,2026-01-14T02:05:14+00:00,2026-01-14T02:05:14+00:00,세종특별자치시 금남면 용포로 63 2층,044-867-7528,조태수,http://blog.naver.com/sj_gangnamdent
