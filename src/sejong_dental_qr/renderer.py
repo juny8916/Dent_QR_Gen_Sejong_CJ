@@ -26,6 +26,13 @@ ICON_MAP = (
     "<circle cx=\"12\" cy=\"11\" r=\"3\"/></svg>"
 )
 
+ICON_HOME = (
+    "<svg class=\"btn-ico\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" fill=\"none\""
+    " stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\">"
+    "<path d=\"M3 11l9-8 9 8\"/><path d=\"M5 10v10h14V10\"/>"
+    "<path d=\"M9 20v-6h6v6\"/></svg>"
+)
+
 ICON_SEAL = (
     "<svg class=\"seal-ico\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" fill=\"none\""
     " stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\">"
@@ -109,6 +116,7 @@ def render_clinic_page(
     safe_badge = html.escape(badge_text)
     safe_validity = html.escape(validity)
     safe_updated = html.escape(build_timestamp)
+    safe_clinic_id_attr = html.escape(clinic_id, quote=True)
 
     safe_sub_line = html.escape(sub_line)
     safe_warning_line = html.escape(warning_line)
@@ -156,8 +164,8 @@ def render_clinic_page(
     if tel_digits:
         tel_href = html.escape(f"tel:{tel_digits}", quote=True)
         tel_button = (
-            f"<a href=\"{tel_href}\" class=\"btn btn-primary\">"
-            f"{ICON_PHONE}<span>전화하기</span></a>"
+            f"<a href=\"{tel_href}\" class=\"btn btn-primary\" data-analytics-event=\"click_call\""
+            f" data-clinic-id=\"{safe_clinic_id_attr}\">{ICON_PHONE}<span>전화하기</span></a>"
         )
 
     address_value = (address or "").strip()
@@ -168,14 +176,30 @@ def render_clinic_page(
         map_href = html.escape(map_url, quote=True)
         map_button = (
             f"<a href=\"{map_href}\" class=\"btn btn-secondary\" target=\"_blank\""
-            f" rel=\"noopener noreferrer\">{ICON_MAP}<span>네이버 지도</span></a>"
+            f" rel=\"noopener noreferrer\" data-analytics-event=\"click_map\""
+            f" data-clinic-id=\"{safe_clinic_id_attr}\">{ICON_MAP}<span>네이버 지도</span></a>"
         )
 
-    cta_buttons = "".join(button for button in [tel_button, map_button] if button)
+    homepage_url = _homepage_url(homepage)
+    homepage_button = ""
+    if homepage_url:
+        homepage_href = html.escape(homepage_url, quote=True)
+        homepage_button = (
+            f"<a href=\"{homepage_href}\" class=\"btn btn-tertiary\" target=\"_blank\""
+            f" rel=\"noopener noreferrer\" data-analytics-event=\"click_homepage\""
+            f" data-clinic-id=\"{safe_clinic_id_attr}\">{ICON_HOME}<span>홈페이지</span></a>"
+        )
+
+    cta_buttons = "".join(button for button in [tel_button, map_button, homepage_button] if button)
     cta_row = f"<div class=\"cta-row\">{cta_buttons}</div>" if cta_buttons else ""
+    action_guide = (
+        "<p class=\"action-guide\">진료 문의 또는 방문은 아래 버튼을 이용하세요.</p>"
+        if is_active
+        else ""
+    )
 
     body = (
-        "<div class=\"page-container\">"
+        f"<div class=\"page-container\" data-page-type=\"clinic\" data-clinic-id=\"{safe_clinic_id_attr}\">"
         "<header class=\"card header-card\">"
         "<div class=\"header-top\">"
         "<div class=\"logos\">"
@@ -184,8 +208,9 @@ def render_clinic_page(
         "</div>"
         "</div>"
         f"{cert_row}"
-        f"{top_message}"
+        f"{action_guide}"
         f"{cta_row}"
+        f"{top_message}"
         "</header>"
         "<section class=\"card info-card\">"
         "<h2 class=\"section-title\">치과 정보</h2>"
@@ -239,6 +264,7 @@ def render_clinic_page(
 def _render_page(cfg: AppConfig, title: str, body: str) -> str:
     safe_title = html.escape(title)
     robots = _render_robots(cfg.noindex)
+    analytics = _render_analytics(cfg)
 
     css = (
         ":root{"
@@ -265,6 +291,7 @@ def _render_page(cfg: AppConfig, title: str, body: str) -> str:
         ".seal{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;border:1px dashed #1e40af;background:#eef2ff;color:#1e40af;font-size:0.8rem;font-weight:700}"
         ".seal-ico{width:14px;height:14px}"
         ".validity-inline{margin:0;font-size:0.85rem;color:var(--text-sub)}"
+        ".action-guide{margin:6px 0 0 0;font-size:0.9rem;color:var(--text-sub)}"
         ".status-message{text-align:left;padding:12px 14px;border-radius:12px;border:1px solid var(--border)}"
         ".status-message.success{background:var(--success-bg)}"
         ".status-message.warning{background:var(--warning-bg)}"
@@ -272,13 +299,15 @@ def _render_page(cfg: AppConfig, title: str, body: str) -> str:
         ".main-msg strong{font-weight:700;color:var(--primary-dark)}"
         ".sub-msg{font-size:0.9rem;color:var(--text-sub);margin:0}"
         ".status-message.warning .main-msg{color:var(--warning-text);font-weight:700}"
-        ".cta-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}"
+        ".cta-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-top:12px}"
         ".btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 14px;border-radius:12px;font-weight:700;font-size:0.95rem;border:1px solid transparent;width:100%}"
         ".btn-ico{width:18px;height:18px}"
         ".btn-primary{background:var(--primary);color:white}"
         ".btn-primary:hover{background:var(--primary-dark)}"
         ".btn-secondary{background:#eef2ff;color:#1e40af;border-color:#c7d2fe}"
         ".btn-secondary:hover{background:#e0e7ff}"
+        ".btn-tertiary{background:#f8fafc;color:var(--text-main);border-color:var(--border)}"
+        ".btn-tertiary:hover{background:#f1f5f9}"
         "a:focus-visible,.btn:focus-visible{outline:2px solid var(--primary);outline-offset:2px}"
         ".info-grid{display:flex;flex-direction:column;gap:16px}"
         ".info-item{display:flex;flex-direction:column;gap:4px;border-bottom:1px solid var(--border);padding-bottom:12px}"
@@ -332,6 +361,7 @@ def _render_page(cfg: AppConfig, title: str, body: str) -> str:
         f"{robots}"
         f"<title>{safe_title}</title>"
         f"<style>{css}</style>"
+        f"{analytics}"
         "</head>"
         "<body>"
         "<main class=\"wrap\">"
@@ -339,6 +369,45 @@ def _render_page(cfg: AppConfig, title: str, body: str) -> str:
         "</main>"
         "</body>"
         "</html>"
+    )
+
+
+def _render_analytics(cfg: AppConfig) -> str:
+    if cfg.analytics_provider != "ga4":
+        return ""
+
+    measurement_id = cfg.ga4_measurement_id.strip()
+    if not measurement_id:
+        return ""
+
+    safe_id_attr = html.escape(measurement_id, quote=True)
+    safe_id_js = html.escape(measurement_id)
+    return (
+        f"<script async src=\"https://www.googletagmanager.com/gtag/js?id={safe_id_attr}\"></script>"
+        "<script>"
+        "window.dataLayer = window.dataLayer || [];"
+        "function gtag(){dataLayer.push(arguments);}"
+        "gtag('js', new Date());"
+        f"gtag('config', '{safe_id_js}', {{'anonymize_ip': true}});"
+        "(function(){"
+        "if (typeof window.gtag !== 'function') {return;}"
+        "document.addEventListener('DOMContentLoaded', function(){"
+        "var container=document.querySelector('[data-page-type=\"clinic\"]');"
+        "if (!container) {return;}"
+        "var clinicId=container.getAttribute('data-clinic-id')||'';"
+        "if (!clinicId) {return;}"
+        "window.gtag('event','qr_view',{clinic_id:clinicId});"
+        "var targets=container.querySelectorAll('[data-analytics-event]');"
+        "targets.forEach(function(el){"
+        "el.addEventListener('click', function(){"
+        "var eventName=el.getAttribute('data-analytics-event');"
+        "if (!eventName) {return;}"
+        "window.gtag('event', eventName, {clinic_id:clinicId});"
+        "});"
+        "});"
+        "});"
+        "})();"
+        "</script>"
     )
 
 
@@ -395,20 +464,28 @@ def _display_or_dash(value: str) -> str:
     return value.strip() if value and value.strip() else "-"
 
 
+def _homepage_url(value: str) -> str:
+    raw = value.strip() if value else ""
+    if not raw:
+        return ""
+
+    parsed = urlparse(raw)
+    if parsed.scheme:
+        if parsed.scheme not in {"http", "https"}:
+            return ""
+        return raw
+    return f"https://{raw}"
+
+
 def _render_homepage(value: str) -> str:
     raw = value.strip() if value else ""
     if not raw:
         return "-"
 
-    parsed = urlparse(raw)
-    if parsed.scheme:
-        if parsed.scheme not in {"http", "https"}:
-            return html.escape(raw)
-        link = raw
-        display = raw
-    else:
-        link = f"https://{raw}"
-        display = link
+    link = _homepage_url(raw)
+    if not link:
+        return html.escape(raw)
+    display = link
 
     safe_link = html.escape(link, quote=True)
     safe_display = html.escape(display)

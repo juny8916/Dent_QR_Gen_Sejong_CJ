@@ -34,6 +34,8 @@ class AppConfig:
     message_active: str = DEFAULT_MESSAGE_ACTIVE
     message_inactive: str = DEFAULT_MESSAGE_INACTIVE
     noindex: bool = True
+    analytics_provider: str = "none"
+    ga4_measurement_id: str = ""
     qr_error_correction: str = "H"
     qr_box_size: int = 10
     qr_border: int = 4
@@ -106,6 +108,16 @@ class AppConfig:
         if not isinstance(self.noindex, bool):
             errors.append("noindex must be a boolean")
 
+        if not _is_nonempty_str(self.analytics_provider):
+            errors.append("analytics_provider must be a non-empty string")
+        elif self.analytics_provider not in {"none", "ga4"}:
+            errors.append("analytics_provider must be 'none' or 'ga4'")
+
+        if not isinstance(self.ga4_measurement_id, str):
+            errors.append("ga4_measurement_id must be a string")
+        elif self.analytics_provider == "ga4" and not self.ga4_measurement_id.strip():
+            errors.append("ga4_measurement_id is required when analytics_provider is 'ga4'")
+
         if not isinstance(self.generate_delivery, bool):
             errors.append("generate_delivery must be a boolean")
 
@@ -175,6 +187,8 @@ def load_config(path: str | Path, allow_missing_base_url: bool = False) -> AppCo
         message_active=_read_str(data, "message_active", DEFAULT_MESSAGE_ACTIVE),
         message_inactive=_read_str(data, "message_inactive", DEFAULT_MESSAGE_INACTIVE),
         noindex=_read_bool(data, "noindex", True),
+        analytics_provider=_read_str(data, "analytics_provider", "none"),
+        ga4_measurement_id=_read_str(data, "ga4_measurement_id", ""),
         qr_error_correction=_read_str(data, "qr_error_correction", "H"),
         qr_box_size=_read_int(data, "qr_box_size", 10),
         qr_border=_read_int(data, "qr_border", 4),
