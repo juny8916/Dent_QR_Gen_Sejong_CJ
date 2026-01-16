@@ -1,4 +1,10 @@
-"""CSV report generation for mapping and changes."""
+"""
+CSV 리포트 생성 모듈(mapping/changes).
+
+- 무엇(What): 운영자가 확인할 mapping.csv, changes.csv를 생성한다.
+- 왜(Why): clinic_id/상태/URL/변경 유형을 운영자가 빠르게 확인하기 위함.
+- 어떻게(How): Excel 호환을 위해 utf-8-sig로 저장한다.
+"""
 
 from __future__ import annotations
 
@@ -10,6 +16,7 @@ from typing import Iterable
 from .planner import ChangeRecord
 
 
+# mapping.csv 고정 컬럼(운영 리포트용).
 MAPPING_COLUMNS = [
     "clinic_name",
     "clinic_id",
@@ -24,6 +31,7 @@ MAPPING_COLUMNS = [
     "qr_named_path",
 ]
 
+# changes.csv 고정 컬럼(변경 이력 리포트용).
 CHANGES_COLUMNS = [
     "clinic_id",
     "clinic_name",
@@ -47,6 +55,11 @@ class MappingRecord:
     qr_named_path: str
 
 
+# -----------------------------------------------------------------------------
+# [WHY] 치과별 URL/QR 경로 등 운영 메타데이터를 표 형태로 제공한다.
+# [WHAT] output/mapping.csv 생성.
+# [HOW] MappingRecord를 고정 컬럼 순서로 기록(utf-8-sig).
+# -----------------------------------------------------------------------------
 def write_mapping_csv(records: Iterable[MappingRecord], path: str | Path) -> None:
     _write_csv(
         path,
@@ -70,6 +83,11 @@ def write_mapping_csv(records: Iterable[MappingRecord], path: str | Path) -> Non
     )
 
 
+# -----------------------------------------------------------------------------
+# [WHY] 신규/비활성/재활성화 등 변경 이력을 운영자가 추적할 수 있게 한다.
+# [WHAT] output/changes.csv 생성.
+# [HOW] ChangeRecord를 고정 컬럼 순서로 기록(utf-8-sig).
+# -----------------------------------------------------------------------------
 def write_changes_csv(
     changes: Iterable[ChangeRecord],
     path: str | Path,

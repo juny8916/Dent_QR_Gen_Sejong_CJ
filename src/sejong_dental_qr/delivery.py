@@ -1,4 +1,10 @@
-"""Delivery package generation for ACTIVE clinics."""
+"""
+치과별 전달 패키지(delivery) 생성 모듈.
+
+- 무엇(What): ACTIVE 치과마다 QR/정보 텍스트를 한 폴더에 모아 전달용으로 만든다.
+- 왜(Why): 운영자가 각 치과에 전달할 파일을 바로 배포할 수 있게 하기 위함.
+- 어떻게(How): output/qr/의 PNG를 복사하고 info.txt를 생성한다.
+"""
 
 from __future__ import annotations
 
@@ -22,6 +28,11 @@ class DeliveryResult:
     clinic_name: str
 
 
+# -----------------------------------------------------------------------------
+# [WHY] ACTIVE 치과에 제공할 전달물(assets)을 규격화해 운영 편의성을 높인다.
+# [WHAT] output/delivery/<clinic_id>_<slug>/ 아래에 qr.png, qr_named.png, info.txt 생성.
+# [HOW] MappingRecord 기반으로 파일 복사 + 안내문 렌더링.
+# -----------------------------------------------------------------------------
 def create_delivery_packages(
     cfg: AppConfig,
     records: Iterable[MappingRecord],

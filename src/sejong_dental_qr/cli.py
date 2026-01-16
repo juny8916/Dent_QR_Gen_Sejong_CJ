@@ -1,4 +1,11 @@
-"""CLI entry points for build/preview commands."""
+"""
+CLI 엔트리포인트: build/preview 실행을 담당한다.
+
+- build: 입력(Excel/id_map) → 처리(ACTIVE/ID 유지) → 출력(docs/output/outbox) 전체 파이프라인 실행
+- preview: docs/ 를 로컬 서버로 미리보기
+
+주의: 이 프로젝트는 환자 개인정보를 수집/저장하지 않으며, clinic_id 단위의 정적 안내에 집중한다.
+"""
 
 from __future__ import annotations
 
@@ -65,6 +72,11 @@ def main(argv: Iterable[str] | None = None) -> int:
     return 2
 
 
+# -----------------------------------------------------------------------------
+# [WHY] 운영자가 버튼 한 번으로 전체 산출물을 재생성할 수 있어야 한다.
+# [WHAT] clinics.xlsx 로드 → id_map 갱신 → HTML/QR/리포트/outbox 생성.
+# [HOW] 각 단계는 fail-fast 정책을 따르며, 산출물은 docs/와 output/에 기록된다.
+# -----------------------------------------------------------------------------
 def _run_build(args: argparse.Namespace) -> int:
     cfg = load_config(args.config, allow_missing_base_url=args.skip_qr)
 
@@ -72,6 +84,8 @@ def _run_build(args: argparse.Namespace) -> int:
     if not should_build:
         return 0
 
+    # WARNING: 치과 동일성 키는 치과명(name)이다.
+    # 치과명이 변경되면 신규 치과로 인식되어 clinic_id가 새로 발급될 수 있다.
     clinic_records = read_clinic_records(
         cfg.input_excel_path,
         cfg.sheet_index,
@@ -83,6 +97,7 @@ def _run_build(args: argparse.Namespace) -> int:
     )
     logging.info("Loaded %s clinic record(s) from Excel.", len(clinic_records))
 
+    # id_map.csv는 clinic_id 영구 고정(persistent mapping)을 위한 저장소다.
     df_prev = load_id_map(cfg.id_map_path)
     id_map_result = update_id_map(clinic_records, cfg.year, df_prev)
     df_next = id_map_result.data
@@ -94,6 +109,7 @@ def _run_build(args: argparse.Namespace) -> int:
     _write_text(site_root / "index.html", render_root_index(cfg))
     _write_text(site_root / "404.html", render_404(cfg))
 
+    # base_url은 QR/링크의 기준 URL이며, --skip-qr일 때는 비어 있어도 된다.
     base_url = cfg.base_url.strip()
     url_prefix = _build_url_prefix(base_url, cfg.path_prefix) if base_url else ""
     qr_root = Path(cfg.output_root) / "qr"
@@ -112,6 +128,7 @@ def _run_build(args: argparse.Namespace) -> int:
         director = _safe_str(row.get("director", ""))
         homepage = _safe_str(row.get("homepage", ""))
 
+        # 정적 사이트(static site) 경로 규칙: docs/<path_prefix>/<clinic_id>/index.html
         page_path = site_root / cfg.path_prefix / clinic_id / "index.html"
         _write_text(
             page_path,
@@ -173,6 +190,7 @@ def _run_build(args: argparse.Namespace) -> int:
         )
 
     output_root = Path(cfg.output_root)
+    # 운영 리포트(CSV)는 Excel 호환을 위해 utf-8-sig로 저장된다.
     write_mapping_csv(mapping_records, output_root / "mapping.csv")
     write_changes_csv(changes, output_root / "changes.csv")
 
@@ -228,6 +246,11 @@ def _safe_str(value: object) -> str:
     return str(value)
 
 
+# -----------------------------------------------------------------------------
+# [WHY] Google Sheets 기반 운영 시 변경 여부를 감지해 불필요한 빌드를 줄인다.
+# [WHAT] URL 다운로드 → sha256 비교 → 동일하면 빌드 스킵.
+# [HOW] clinics_hash_path에 해시를 저장하고, --force면 무시한다.
+# -----------------------------------------------------------------------------
 def _prepare_clinics_source(cfg: AppConfig, force: bool) -> bool:
     if cfg.clinics_source != "url":
         return True
@@ -273,6 +296,7 @@ def _publish_outbox(cfg: AppConfig, build_timestamp: str) -> None:
         logging.warning("Outbox root not found: %s", outbox_root)
         return
 
+    # docs/outbox 는 운영자 다운로드 페이지로 GitHub Pages에 공개된다.
     docs_outbox = Path(cfg.site_root) / "outbox"
     if docs_outbox.exists():
         shutil.rmtree(docs_outbox)

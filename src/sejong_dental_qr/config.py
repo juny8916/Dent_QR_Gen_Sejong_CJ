@@ -1,4 +1,12 @@
-"""Configuration loading and validation."""
+"""
+config.toml 로딩/검증 모듈.
+
+- 무엇(What): 운영자가 설정하는 config.toml 값을 AppConfig로 읽고, 필수 값/범위를 엄격히 검증한다.
+- 왜(Why): 자동화(정기 빌드) 환경에서 잘못된 설정을 조기에 차단(fail-fast)하기 위함.
+- 어떻게(How): 기본값 + 타입/범위 검증 후 ValueError로 즉시 실패.
+
+주의: 이 프로젝트는 환자 개인정보(PII)를 수집/저장하지 않는다.
+"""
 
 from __future__ import annotations
 
@@ -47,6 +55,11 @@ class AppConfig:
     outbox_mode: str = "changed"
     outbox_root: str = "output/outbox"
 
+    # -----------------------------------------------------------------------------
+    # [WHY] 잘못된 설정은 운영 자동화에서 큰 사고로 이어지므로, 즉시 실패하도록 엄격 검증한다.
+    # [WHAT] 타입/범위/필수값/상호의존(analytics_provider ↔ measurement_id)을 검사한다.
+    # [HOW] errors 리스트에 누적 후 ValueError로 fail-fast.
+    # -----------------------------------------------------------------------------
     def validate(self, allow_missing_base_url: bool = False) -> None:
         errors: list[str] = []
 
@@ -159,6 +172,11 @@ class AppConfig:
             raise ValueError("Invalid config:\n- " + "\n- ".join(errors))
 
 
+# -----------------------------------------------------------------------------
+# [WHY] config.toml은 운영 환경마다 다르므로, 일관된 방식으로 읽고 검증해야 한다.
+# [WHAT] TOML → AppConfig 매핑 + 기본값 적용 + validate() 호출.
+# [HOW] 키 누락/타입 오류 시 ValueError로 즉시 실패.
+# -----------------------------------------------------------------------------
 def load_config(path: str | Path, allow_missing_base_url: bool = False) -> AppConfig:
     config_path = Path(path)
     with config_path.open("rb") as handle:

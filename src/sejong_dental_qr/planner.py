@@ -1,4 +1,10 @@
-"""Change planning between id_map snapshots."""
+"""
+id_map 스냅샷 간 변경사항(change) 계산 모듈.
+
+- 무엇(What): 이전/현재 id_map을 비교해 NEW/DEACTIVATED/REACTIVATED/UNCHANGED를 산출한다.
+- 왜(Why): outbox 대상(NEW/REACTIVATED)을 선별하고 운영 리포트를 만들기 위함.
+- 어떻게(How): clinic_id 기준으로 상태 전환을 비교한다.
+"""
 
 from __future__ import annotations
 
@@ -15,6 +21,11 @@ class ChangeRecord:
     change_type: str
 
 
+# -----------------------------------------------------------------------------
+# [WHY] 변경 유형을 명확히 구분해 운영 전달(outbox) 대상만 선별한다.
+# [WHAT] clinic_id 기준으로 상태 전환을 비교해 ChangeRecord 리스트를 만든다.
+# [HOW] prev/next lookup 생성 후 ACTIVE/INACTIVE 전환 규칙으로 분류한다.
+# -----------------------------------------------------------------------------
 def build_changes(df_prev: pd.DataFrame, df_next: pd.DataFrame) -> list[ChangeRecord]:
     prev_lookup = _to_lookup(df_prev)
     next_lookup = _to_lookup(df_next)

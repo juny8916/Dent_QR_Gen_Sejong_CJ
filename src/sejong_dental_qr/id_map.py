@@ -1,4 +1,13 @@
-"""Clinic name to ID mapping persistence."""
+"""
+id_map.csv(치과명 ↔ clinic_id) 영속 저장소(persistent mapping) 처리 모듈.
+
+- 무엇(What): 치과명 기준으로 clinic_id를 유지/신규 발급하고 상태(ACTIVE/INACTIVE)를 갱신한다.
+- 왜(Why): QR은 clinic_id 기반이므로, 동일 치과는 영구히 같은 ID를 유지해야 한다.
+- 어떻게(How): 기존 id_map 로드 → 치과명 매칭 → 신규 ID 발급 → 상태/메타데이터 업데이트.
+
+주의: 치과명은 동일성 키이므로, 치과명 변경/오타는 신규 치과로 인식될 수 있다.
+개인정보(환자 데이터)는 저장/처리하지 않는다.
+"""
 
 from __future__ import annotations
 
@@ -13,6 +22,7 @@ import pandas as pd
 from .io_excel import ClinicInput
 
 
+# id_map.csv 필수 컬럼(정책상 고정). 순서가 변하면 외부 운영 스크립트에 영향 가능.
 CORE_COLUMNS = [
     "clinic_id",
     "clinic_name",
@@ -21,6 +31,7 @@ CORE_COLUMNS = [
     "last_seen_at",
 ]
 
+# 추가 메타데이터 컬럼(치과 기본 정보 유지용).
 EXTRA_COLUMNS = [
     "address",
     "phone",
@@ -58,6 +69,11 @@ def save_id_map(df: pd.DataFrame, path: str | Path) -> None:
     df.to_csv(csv_path, index=False, encoding="utf-8-sig")
 
 
+# -----------------------------------------------------------------------------
+# [WHY] clinic_id 영구 고정 정책을 유지하면서 최신 ACTIVE/INACTIVE 상태를 반영한다.
+# [WHAT] 입력 레코드(ClinicInput)와 기존 id_map을 합쳐 새 DataFrame을 생성한다.
+# [HOW] 치과명 기준 매칭 + 신규 ID 발급 + last_seen_at 갱신 + 빈 값은 기존 값 유지.
+# -----------------------------------------------------------------------------
 def update_id_map(
     clinic_records: Iterable[ClinicInput],
     year: int,
@@ -65,6 +81,7 @@ def update_id_map(
 ) -> IdMapResult:
     records = list(clinic_records)
     names = [record.name for record in records]
+    # WARNING: 치과명 중복은 clinic_id 충돌을 유발하므로 즉시 실패한다.
     if len(names) != len(set(names)):
         raise ValueError("Duplicate clinic names provided to update_id_map")
 
@@ -81,8 +98,10 @@ def update_id_map(
     for _, row in existing_df.iterrows():
         name = _safe_str(row["clinic_name"])
         record = record_by_name.get(name)
+        # 이번 입력에 있으면 ACTIVE, 없으면 INACTIVE (정회원 판정 기준)
         status = "ACTIVE" if record else "INACTIVE"
         last_seen_at = now if status == "ACTIVE" else _safe_str(row["last_seen_at"])
+        # 빈 값은 운영 실수 방지를 위해 기존 값을 유지한다.
         address = _merge_field(record.address if record else "", row.get("address", ""))
         phone = _merge_field(record.phone if record else "", row.get("phone", ""))
         director = _merge_field(record.director if record else "", row.get("director", ""))
@@ -102,6 +121,7 @@ def update_id_map(
         )
 
     existing_names = set(existing_df["clinic_name"])
+    # 신규 치과는 prefix 규칙(SJYY-####)으로 ID 발급.
     new_names = sorted(active_names - existing_names)
     new_ids: list[str] = []
     for name in new_names:

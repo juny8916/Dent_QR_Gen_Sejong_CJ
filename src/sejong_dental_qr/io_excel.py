@@ -1,4 +1,12 @@
-"""Excel I/O helpers for clinic records."""
+"""
+엑셀(clinics.xlsx) 입력 처리 모듈.
+
+- 무엇(What): 치과명/주소/전화/대표원장/홈페이지 컬럼을 읽어 ClinicInput으로 변환한다.
+- 왜(Why): 입력 데이터 품질(중복/누락)을 조기에 검증하여 운영 오류를 방지한다.
+- 어떻게(How): 치과명 정규화(normalize) + 중복 체크 + 필수 컬럼 검증(fail-fast).
+
+주의: 치과명은 clinic_id의 동일성 키로 사용되므로, 오타/변경은 신규 치과로 인식될 수 있다.
+"""
 
 from __future__ import annotations
 
@@ -21,6 +29,11 @@ class ClinicInput:
     homepage: str
 
 
+# -----------------------------------------------------------------------------
+# [WHY] 운영자가 관리하는 엑셀을 신뢰 가능한 레코드로 변환해야 한다.
+# [WHAT] 필수 컬럼 검증 + 치과명 정규화 + 중복 검증 후 ClinicInput 리스트 반환.
+# [HOW] pandas.read_excel(openpyxl) → normalize_name → fail-fast.
+# -----------------------------------------------------------------------------
 def read_clinic_records(
     input_excel_path: str,
     sheet_index: int,
@@ -91,6 +104,7 @@ def read_clinic_records(
             empty_count,
         )
 
+    # WARNING: 치과명 중복은 clinic_id 혼선을 야기하므로 즉시 실패한다.
     names = [record.name for record in records]
     duplicates = _find_duplicates(names)
     if duplicates:
