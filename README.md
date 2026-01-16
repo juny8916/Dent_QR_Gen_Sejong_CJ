@@ -1,5 +1,43 @@
 # Sejong Dental QR 운영 가이드
 
+## 프로젝트 개요 (개발자용)
+
+이 도구는 세종시 치과의사회 정회원(official member)을 환자에게 신뢰성 있게 안내하고,
+전화/지도/홈페이지로 자연스럽게 행동(CTA)을 유도하기 위한 정적 사이트(static site) 생성기입니다.
+입력 데이터는 치과 목록과 영구 ID 매핑을 기반으로 하며, 환자 개인정보는 수집/저장하지 않습니다.
+
+### 입력 → 처리 → 출력 파이프라인
+- 입력(Input)
+  - `data/clinics.xlsx`: 치과 목록(치과명/주소/전화/대표원장/홈페이지)
+  - `data/id_map.csv`: 치과명 ↔ clinic_id 매핑(지속성 저장소, persistent mapping)
+- 처리(Processing)
+  - 치과명 정규화 + 중복 검증(중복이면 즉시 실패)
+  - id_map 기반 clinic_id 유지/신규 발급
+  - ACTIVE/INACTIVE 판정(이번 입력에 존재하면 ACTIVE)
+- 출력(Output)
+  - `docs/`: GitHub Pages 배포용 정적 사이트
+  - `output/qr/`: QR 이미지(및 캡션 포함 버전)
+  - `output/delivery/`, `output/outbox/`: 운영자 전달 패키지 및 ZIP 묶음
+  - `output/mapping.csv`, `output/changes.csv`: 운영 리포트
+
+### Policy (정책)
+- clinic_id는 치과 기준으로 영구 고정(치과명 기준 매핑)
+- ACTIVE/INACTIVE 기준은 “이번 입력(엑셀)에 존재하는가”
+- 중복 치과명/필수 컬럼 누락 등은 즉시 실패(fail-fast)
+- 환자 개인정보를 수집/저장하지 않음(정적 정보 + 링크 제공)
+
+### 운영(Ops)
+- `docs/`는 GitHub Pages 배포 루트
+- outbox ZIP은 운영자가 신규/복귀 치과에 전달하는 패키지
+
+### 디렉토리 구조 요약
+- `docs/` (정적 사이트)
+  - `docs/c/<clinic_id>/index.html`: 치과별 랜딩 페이지
+  - `docs/outbox/index.html`: outbox 다운로드 페이지
+- `output/` (운영 산출물)
+  - `output/qr/`, `output/delivery/`, `output/outbox/zips/`
+  - `output/mapping.csv`, `output/changes.csv`
+
 운영자가 바로 실행할 수 있도록 순서대로 안내합니다.
 
 ## 1) 가상환경 생성 및 설치

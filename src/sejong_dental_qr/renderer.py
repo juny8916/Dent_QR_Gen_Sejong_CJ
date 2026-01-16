@@ -4,6 +4,7 @@
 - 무엇(What): 치과 페이지(clinic page), 루트/404, outbox 인덱스 HTML을 생성한다.
 - 왜(Why): GitHub Pages 배포용 정적 사이트(static site)를 만들기 위함.
 - 어떻게(How): 외부 입력은 모두 HTML escape 처리하고, CTA 우선 UI로 환자 행동을 유도한다.
+- 디자인(v4.7): Refined Button Hierarchy (Solid -> Outlined -> Soft)
 
 주의: 이 시스템은 환자 개인정보를 수집/저장하지 않으며,
 필요 최소한의 clinic_id 이벤트만(옵션) 분석용으로 전송한다.
@@ -47,6 +48,19 @@ ICON_SEAL = (
     " stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\">"
     "<circle cx=\"12\" cy=\"12\" r=\"9\"/>"
     "<path d=\"M8.5 12l2.5 2.5 4.5-4.5\"/></svg>"
+)
+
+ICON_CHECK = (
+    "<svg class=\"check-ico\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" fill=\"none\""
+    " stroke=\"currentColor\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-linejoin=\"round\">"
+    "<polyline points=\"20 6 9 17 4 12\"/></svg>"
+)
+
+ICON_SAVE = (
+    "<svg class=\"btn-ico\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" fill=\"none\""
+    " stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\">"
+    "<path d=\"M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z\"/>"
+    "<polyline points=\"17 21 17 13 7 13 7 21\"/><polyline points=\"7 3 7 8 15 8\"/></svg>"
 )
 
 
@@ -100,8 +114,7 @@ def render_outbox_index(cfg: AppConfig, build_timestamp: str, zip_names: list[st
 # -----------------------------------------------------------------------------
 # [WHY] 환자가 QR 스캔 직후 신뢰(정회원 인증) → 행동(전화/지도/홈페이지)으로 이어지도록 설계한다.
 # [WHAT] 치과별 랜딩 페이지 HTML을 반환한다(docs/c/<clinic_id>/index.html).
-# [HOW] 인증 정보 → (가이드) → CTA → 안내 메시지 → 상세 정보 순으로 배치한다.
-#       링크는 tel:/네이버지도/홈페이지 규칙을 따르며, 외부 입력은 escape 처리한다.
+# [HOW] 인증 → CTA → 안내 메시지 → 정보 순으로 배치한다.
 # -----------------------------------------------------------------------------
 def render_clinic_page(
     cfg: AppConfig,
@@ -127,7 +140,6 @@ def render_clinic_page(
     sub_line = "세종시 치과의사회는 시민의 구강건강을 지키는 공식 치과의사 단체입니다."
     warning_line = "현재 정회원으로 확인되지 않습니다."
 
-    # WARNING: 엑셀에서 들어온 문자열은 반드시 escape 처리하여 XSS를 방지한다.
     safe_name = html.escape(clinic_name)
     safe_badge = html.escape(badge_text)
     safe_validity = html.escape(validity)
@@ -165,13 +177,6 @@ def render_clinic_page(
         badge_class = "inactive"
 
     seal_html = f"<span class=\"seal\">{ICON_SEAL}공식 인증</span>" if is_active else ""
-    brand_meta = (
-        "<div class=\"brand-meta\">"
-        f"<span class=\"badge {badge_class}\">{safe_badge}</span>"
-        f"{seal_html}"
-        "</div>"
-    )
-    validity_inline = f"<p class=\"validity-inline\">인증기간: {safe_validity}</p>"
 
     tel_digits = _sanitize_tel(phone)
     tel_button = ""
@@ -199,32 +204,72 @@ def render_clinic_page(
     if homepage_url:
         homepage_href = html.escape(homepage_url, quote=True)
         homepage_button = (
-            f"<a href=\"{homepage_href}\" class=\"btn btn-tertiary\" target=\"_blank\""
+            f"<a href=\"{homepage_href}\" class=\"btn btn-secondary\" target=\"_blank\""
             f" rel=\"noopener noreferrer\" data-analytics-event=\"click_homepage\""
             f" data-clinic-id=\"{safe_clinic_id_attr}\">{ICON_HOME}<span>홈페이지</span></a>"
         )
 
     cta_buttons = "".join(button for button in [tel_button, map_button, homepage_button] if button)
     cta_row = f"<div class=\"cta-row\">{cta_buttons}</div>" if cta_buttons else ""
+
+    js_name = safe_name.replace("'", "\\'")
+    js_tel = tel_digits
+    js_addr = html.escape(address_value).replace("'", "\\'")
+
+    save_contact_btn = (
+        f"<button class=\"btn btn-soft btn-full\" onclick=\"saveContact('{js_name}', '{js_tel}', '{js_addr}')\">"
+        f"{ICON_SAVE}<span>연락처 저장하기</span></button>"
+    ) if is_active else ""
+
     action_guide = (
         "<p class=\"action-guide\">진료 문의 및 예약은 위 버튼을 이용하세요.</p>"
-        if is_active and cta_row
+        if is_active
         else ""
     )
-    action_section = (
-        f"<section class=\"section-action\">{cta_row}{action_guide}</section>"
-        if cta_row or action_guide
-        else ""
-    )
+
+    value_section = (
+        "<section class=\"card value-card\">"
+        "<h2 class=\"section-title\">세종시 치과의사회가 보증하는 가치</h2>"
+        "<ul class=\"value-list\">"
+        "<li class=\"value-item\">"
+        f"<div class=\"value-icon-box\">{ICON_CHECK}</div>"
+        "<div class=\"value-text\">"
+        "<strong class=\"value-head\">윤리 진료 준수</strong>"
+        "<span class=\"value-desc\">원칙을 지키는 책임 진료</span>"
+        "</div>"
+        "</li>"
+        "<li class=\"value-item\">"
+        f"<div class=\"value-icon-box\">{ICON_CHECK}</div>"
+        "<div class=\"value-text\">"
+        "<strong class=\"value-head\">지속적인 학술 활동</strong>"
+        "<span class=\"value-desc\">정기 학술대회 및 최신 임상 교육 이수</span>"
+        "</div>"
+        "</li>"
+        "<li class=\"value-item\">"
+        f"<div class=\"value-icon-box\">{ICON_CHECK}</div>"
+        "<div class=\"value-text\">"
+        "<strong class=\"value-head\">지역사회 공헌</strong>"
+        "<span class=\"value-desc\">시민 구강검진, 취약계층 봉사활동 참여</span>"
+        "</div>"
+        "</li>"
+        "</ul>"
+        "</section>"
+    ) if is_active else ""
 
     body = (
         f"<div class=\"page-container\" data-page-type=\"clinic\" data-clinic-id=\"{safe_clinic_id_attr}\">"
         "<header class=\"section-brand\">"
         f"<h1 class=\"clinic-title\">{safe_name}</h1>"
-        f"{brand_meta}"
-        f"{validity_inline}"
+        "<div class=\"brand-meta\">"
+        f"<span class=\"badge {badge_class}\">{safe_badge}</span>"
+        f"{seal_html}"
+        "</div>"
         "</header>"
-        f"{action_section}"
+        "<section class=\"section-action\">"
+        f"{cta_row}"
+        f"{save_contact_btn}"
+        f"{action_guide}"
+        "</section>"
         f"{top_message}"
         "<section class=\"card info-card\">"
         "<div class=\"info-grid\">"
@@ -246,51 +291,13 @@ def render_clinic_page(
         "</div>"
         "</div>"
         "</section>"
-        "<section class=\"card value-card\">"
-        "<h2 class=\"section-title\">세종시 치과의사회가 보증하는 가치</h2>"
-        "<ul class=\"value-list\">"
-        "<li class=\"value-item\">"
-        "<div class=\"value-icon-box\">"
-        "<svg class=\"check-ico\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" fill=\"none\""
-        " stroke=\"currentColor\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-linejoin=\"round\">"
-        "<polyline points=\"20 6 9 17 4 12\"/></svg>"
-        "</div>"
-        "<div class=\"value-text\">"
-        "<strong class=\"value-head\">윤리 진료 준수</strong>"
-        "<span class=\"value-desc\">원칙을 지키는 책임 진료</span>"
-        "</div>"
-        "</li>"
-        "<li class=\"value-item\">"
-        "<div class=\"value-icon-box\">"
-        "<svg class=\"check-ico\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" fill=\"none\""
-        " stroke=\"currentColor\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-linejoin=\"round\">"
-        "<polyline points=\"20 6 9 17 4 12\"/></svg>"
-        "</div>"
-        "<div class=\"value-text\">"
-        "<strong class=\"value-head\">지속적인 학술 활동</strong>"
-        "<span class=\"value-desc\">정기 학술대회 및 최신 임상 교육 이수</span>"
-        "</div>"
-        "</li>"
-        "<li class=\"value-item\">"
-        "<div class=\"value-icon-box\">"
-        "<svg class=\"check-ico\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" fill=\"none\""
-        " stroke=\"currentColor\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-linejoin=\"round\">"
-        "<polyline points=\"20 6 9 17 4 12\"/></svg>"
-        "</div>"
-        "<div class=\"value-text\">"
-        "<strong class=\"value-head\">지역사회 공헌</strong>"
-        "<span class=\"value-desc\">시민 구강검진, 취약계층 봉사활동 참여</span>"
-        "</div>"
-        "</li>"
-        "</ul>"
-        "</section>"
+        f"{value_section}"
         "<footer class=\"section-footer\">"
         "<div class=\"official-logos\">"
-        f"<img class=\"logo-grayscale\" src=\"{kda_logo}\" alt=\"대한치과의사협회\">"
         f"<img class=\"logo-grayscale\" src=\"{sejong_logo}\" alt=\"세종시치과의사회\">"
+        f"<img class=\"logo-grayscale\" src=\"{kda_logo}\" alt=\"대한치과의사협회\">"
         "</div>"
-        "<p class=\"footer-msg\">본 페이지는 <strong>세종특별자치시 치과의사회</strong>가<br>"
-        "공식 정보를 보증하는 의료기관 안내입니다.</p>"
+        "<p class=\"footer-msg\">본 페이지는 <strong>세종특별자치시 치과의사회</strong>가<br>공식 정보를 보증하는 의료기관 안내입니다.</p>"
         "<div class=\"footer-meta\">"
         f"<span>인증기간: {safe_validity}</span>"
         f"<span>Updated: {safe_updated}</span>"
@@ -307,6 +314,24 @@ def _render_page(cfg: AppConfig, title: str, body: str) -> str:
     robots = _render_robots(cfg.noindex)
     analytics = _render_analytics(cfg)
 
+    vcard_script = (
+        "<script>"
+        "function saveContact(name, phone, address) {"
+        "  var vcard = 'BEGIN:VCARD\\nVERSION:3.0\\nFN:' + name + '\\nTEL;TYPE=CELL:' + phone + '\\nADR;TYPE=WORK:;;' + address + ';;;\\nEND:VCARD';"
+        "  var blob = new Blob([vcard], { type: 'text/vcard' });"
+        "  var url = URL.createObjectURL(blob);"
+        "  var a = document.createElement('a');"
+        "  a.style.display = 'none';"
+        "  a.href = url;"
+        "  a.download = name + '.vcf';"
+        "  document.body.appendChild(a);"
+        "  a.click();"
+        "  document.body.removeChild(a);"
+        "  window.URL.revokeObjectURL(url);"
+        "}"
+        "</script>"
+    )
+
     css = (
         ":root{"
         "--primary:#172554;--primary-light:#1e3a8a;"
@@ -317,6 +342,7 @@ def _render_page(cfg: AppConfig, title: str, body: str) -> str:
         "--success-bg:#f0fdfa;--success-text:#115e59;"
         "--warning-bg:#fef2f2;--warning-text:#b91c1c;"
         "--shadow-card:0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);"
+        "--btn-soft-bg:#eff6ff;--btn-soft-text:#1e40af;"
         "}"
         "*{box-sizing:border-box}body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,system-ui,Roboto,sans-serif;line-height:1.6;margin:0;color:var(--text-main);background:var(--bg-color);-webkit-text-size-adjust:100%}"
         ".wrap{max-width:480px;margin:0 auto;padding:0;min-height:100vh;display:flex;flex-direction:column;position:relative;background:#f8fafc}"
@@ -330,14 +356,15 @@ def _render_page(cfg: AppConfig, title: str, body: str) -> str:
         ".badge.inactive{background:var(--warning-bg);color:var(--warning-text);border:1px solid #fee2e2}"
         ".seal{display:inline-flex;align-items:center;gap:4px;font-size:0.75rem;font-weight:700;color:var(--primary);background:#fff;padding:5px 10px;border-radius:6px;border:1px solid #e2e8f0;box-shadow:0 1px 2px rgba(0,0,0,0.03)}"
         ".seal-ico{width:12px;height:12px;color:var(--primary)}"
-        ".validity-inline{font-size:0.8rem;color:var(--text-light);margin:6px 0 0 0}"
         ".cta-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}"
         ".cta-row > .btn:first-child{grid-column:span 2}"
-        ".btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:16px;border-radius:12px;font-weight:700;font-size:1rem;border:none;cursor:pointer;position:relative;overflow:hidden;transition:background 0.1s}"
-        ".btn:active{opacity:0.9}"
-        ".btn-primary{background:var(--primary);color:white;box-shadow:0 4px 10px rgba(23, 37, 84, 0.2)}"
+        ".btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:16px;border-radius:12px;font-weight:700;font-size:1rem;border:none;cursor:pointer;position:relative;overflow:hidden;transition:all 0.1s}"
+        ".btn:active{transform:scale(0.98);opacity:0.9}"
+        ".btn-primary{background:var(--primary);color:white;box-shadow:0 4px 10px rgba(23, 37, 84, 0.25)}"
         ".btn-secondary{background:#fff;color:var(--text-main);border:1px solid #cbd5e1;box-shadow:var(--shadow-card)}"
-        ".btn-tertiary{background:transparent;color:var(--text-sub);border:1px solid transparent;text-decoration:underline;text-underline-offset:4px;text-decoration-color:#cbd5e1}"
+        ".btn-soft{background:var(--btn-soft-bg);color:var(--btn-soft-text);border:1px solid transparent}"
+        ".btn-soft:hover{background:#dbeafe}"
+        ".btn-full{width:100%;margin-top:4px}"
         ".btn-ico{width:20px;height:20px}"
         ".action-guide{font-size:0.9rem;color:var(--text-sub);text-align:center;margin-top:16px;font-weight:600}"
         ".status-message{padding:20px;border-radius:12px;font-size:1rem;line-height:1.6;background:#fff;border:1px solid #e2e8f0;box-shadow:var(--shadow-card)}"
@@ -354,7 +381,6 @@ def _render_page(cfg: AppConfig, title: str, body: str) -> str:
         ".value{font-size:1rem;color:var(--text-main);font-weight:600;text-align:right;word-break:keep-all;line-height:1.5}"
         ".value.phone{font-family:ui-monospace,SFMono-Regular,monospace;font-weight:700;letter-spacing:0.02em;color:var(--text-main);font-size:1.05rem}"
         ".value a{color:var(--primary-light);text-decoration:underline;text-underline-offset:3px}"
-        ".tel-link,.map-link{color:var(--primary-light)}"
         ".section-title{font-size:1.1rem;font-weight:800;color:var(--text-main);margin-bottom:18px;letter-spacing:-0.01em}"
         ".value-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:16px}"
         ".value-item{display:flex;gap:12px;align-items:flex-start}"
@@ -366,23 +392,15 @@ def _render_page(cfg: AppConfig, title: str, body: str) -> str:
         ".section-footer{margin-top:auto;padding-top:40px;text-align:center}"
         ".official-logos{display:flex;justify-content:center;gap:16px;margin-bottom:24px;opacity:1;filter:none}"
         ".logo-grayscale{height:28px;width:auto;filter:grayscale(100%);opacity:0.7}"
-        ".logo-placeholder{background:#e2e8f0;width:120px;height:32px;border-radius:4px}"
         ".footer-msg{font-size:0.75rem;color:var(--text-light);margin-bottom:20px;line-height:1.5}"
         ".footer-msg strong{color:var(--text-sub);font-weight:600}"
         ".footer-meta{display:flex;justify-content:center;flex-wrap:wrap;gap:10px;font-size:0.7rem;color:var(--text-light);margin-bottom:28px}"
         ".link-list{display:flex;justify-content:center;gap:14px}"
-        ".link-item a{font-size:0.75rem;color:var(--text-light);font-weight:500;text-decoration:underline;text-decoration-color:#cbd5e1}"
+        ".link-item a{font-size:0.75rem;color:var(--text-sub);font-weight:600;text-decoration:underline;text-decoration-color:#cbd5e1}"
         ".link-url{display:none}"
         ".empty-state{text-align:center;padding:60px 20px}"
         ".icon-area{font-size:2.5rem;font-weight:900;color:#e2e8f0;margin-bottom:20px}"
-        ".empty-state.error .icon-area{color:#fca5a5}"
-        ".page-title{font-size:1.1rem;font-weight:800;color:var(--text-main);margin:0 0 12px 0}"
-        ".meta-info{font-size:0.85rem;color:var(--text-light)}"
-        ".action-area{margin-top:12px}"
-        ".zip-list{list-style:none;padding:0;margin:0}"
-        ".zip-list li{margin-bottom:8px}"
-        ".file-link{display:flex;align-items:center;gap:8px;padding:10px 12px;background:#fff;border:1px solid #e2e8f0;border-radius:10px;color:var(--text-main)}"
-        ".file-icon{font-size:0.7rem;font-weight:700;background:var(--primary);color:#fff;padding:2px 6px;border-radius:4px}"
+        "@media (max-width:340px){.cta-row{grid-template-columns:1fr}.cta-row > .btn:first-child{grid-column:auto}}"
     )
 
     return (
@@ -395,6 +413,7 @@ def _render_page(cfg: AppConfig, title: str, body: str) -> str:
         f"<title>{safe_title}</title>"
         f"<style>{css}</style>"
         f"{analytics}"
+        f"{vcard_script}"
         "</head>"
         "<body>"
         "<main class=\"wrap\">"
@@ -405,11 +424,6 @@ def _render_page(cfg: AppConfig, title: str, body: str) -> str:
     )
 
 
-# -----------------------------------------------------------------------------
-# [WHY] GA4 활성화 시 clinic_id 단위의 최소 이벤트만 수집한다.
-# [WHAT] gtag 스니펫 + qr_view / click_* 이벤트를 전송하는 스크립트를 삽입한다.
-# [HOW] data-page-type="clinic" 에서만 동작하며, clinic_id가 없으면 전송하지 않는다.
-# -----------------------------------------------------------------------------
 def _render_analytics(cfg: AppConfig) -> str:
     if cfg.analytics_provider != "ga4":
         return ""
@@ -430,7 +444,7 @@ def _render_analytics(cfg: AppConfig) -> str:
         "(function(){"
         "if (typeof window.gtag !== 'function') {return;}"
         "document.addEventListener('DOMContentLoaded', function(){"
-        "var container=document.querySelector('[data-page-type=\"clinic\"]');"
+        "var container=document.querySelector('[data-page-type=\\\"clinic\\\"]');"
         "if (!container) {return;}"
         "var clinicId=container.getAttribute('data-clinic-id')||'';"
         "if (!clinicId) {return;}"
