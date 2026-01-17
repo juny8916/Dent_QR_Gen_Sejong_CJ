@@ -13,7 +13,9 @@
 from __future__ import annotations
 
 import html
+import json
 import re
+from pathlib import Path
 from urllib.parse import urlparse, quote
 
 from .config import AppConfig
@@ -62,6 +64,9 @@ ICON_SAVE = (
     "<path d=\"M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z\"/>"
     "<polyline points=\"17 21 17 13 7 13 7 21\"/><polyline points=\"7 3 7 8 15 8\"/></svg>"
 )
+
+# 치과별 안내 위젯(챗봇) 데이터 경로: data/clinic_extra/<clinic_id>.json
+_CLINIC_EXTRA_DIR = Path(__file__).resolve().parents[2] / "data" / "clinic_extra"
 
 
 def render_root_index(cfg: AppConfig) -> str:
@@ -179,9 +184,9 @@ def render_clinic_page(
     seal_html = f"<span class=\"seal\">{ICON_SEAL}공식 인증</span>" if is_active else ""
 
     tel_digits = _sanitize_tel(phone)
+    tel_href = html.escape(f"tel:{tel_digits}", quote=True) if tel_digits else ""
     tel_button = ""
-    if tel_digits:
-        tel_href = html.escape(f"tel:{tel_digits}", quote=True)
+    if tel_href:
         tel_button = (
             f"<a href=\"{tel_href}\" class=\"btn btn-primary\" data-analytics-event=\"click_call\""
             f" data-clinic-id=\"{safe_clinic_id_attr}\">{ICON_PHONE}<span>전화상담</span></a>"
@@ -190,9 +195,9 @@ def render_clinic_page(
     address_value = (address or "").strip()
     query = address_value if address_value else clinic_name.strip()
     map_url = _naver_map_search_url(query)
+    map_href = html.escape(map_url, quote=True) if map_url else ""
     map_button = ""
-    if map_url:
-        map_href = html.escape(map_url, quote=True)
+    if map_href:
         map_button = (
             f"<a href=\"{map_href}\" class=\"btn btn-secondary\" target=\"_blank\""
             f" rel=\"noopener noreferrer\" data-analytics-event=\"click_map\""
@@ -200,9 +205,9 @@ def render_clinic_page(
         )
 
     homepage_url = _homepage_url(homepage)
+    homepage_href = html.escape(homepage_url, quote=True) if homepage_url else ""
     homepage_button = ""
-    if homepage_url:
-        homepage_href = html.escape(homepage_url, quote=True)
+    if homepage_href:
         homepage_button = (
             f"<a href=\"{homepage_href}\" class=\"btn btn-secondary\" target=\"_blank\""
             f" rel=\"noopener noreferrer\" data-analytics-event=\"click_homepage\""
@@ -256,6 +261,12 @@ def render_clinic_page(
         "</section>"
     ) if is_active else ""
 
+    extra_payload = _load_clinic_extra(clinic_id)
+    chatbot_html = ""
+    if extra_payload:
+        extra_json = _serialize_extra_json(extra_payload)
+        chatbot_html = _render_chatbot_widget(extra_json, tel_href, map_href)
+
     body = (
         f"<div class=\"page-container\" data-page-type=\"clinic\" data-clinic-id=\"{safe_clinic_id_attr}\">"
         "<header class=\"section-brand\">"
@@ -304,10 +315,158 @@ def render_clinic_page(
         "</div>"
         f"{_render_external_links()}"
         "</footer>"
+        f"{chatbot_html}"
         "</div>"
     )
     return _render_page(cfg, title=safe_name, body=body)
 
+
+def _load_clinic_extra(clinic_id: str) -> dict[str, object] | None:
+    extra_path = _CLINIC_EXTRA_DIR / f"{clinic_id}.json"
+    if not extra_path.exists():
+        return None
+
+    raw = extra_path.read_text(encoding="utf-8")
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:  # noqa: PERF203
+        raise ValueError(f"Invalid clinic_extra JSON: {extra_path}") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"clinic_extra must be a JSON object: {extra_path}")
+    return data
+
+
+def _serialize_extra_json(data: dict[str, object]) -> str:
+    json_text = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+    return json_text.replace("<", "\\u003c")
+
+
+def _render_chatbot_widget(extra_json: str, tel_href: str, map_href: str) -> str:
+    cta_links = ""
+    if tel_href:
+        cta_links += f"<a href=\"{tel_href}\" class=\"chat-cta-btn\">전화상담</a>"
+    if map_href:
+        cta_links += f"<a href=\"{map_href}\" class=\"chat-cta-btn\" target=\"_blank\" rel=\"noopener noreferrer\">지도보기</a>"
+    cta_html = f"<div class=\"chat-cta\">{cta_links}</div>" if cta_links else ""
+
+    return (
+        f"<script type=\"application/json\" id=\"clinic-extra-json\">{extra_json}</script>"
+        "<div class=\"chat-widget\" id=\"chat-widget\">"
+        "<button class=\"chat-fab\" type=\"button\" aria-label=\"문의하기\">문의하기</button>"
+        "<div class=\"chat-panel\" role=\"dialog\" aria-hidden=\"true\">"
+        "<div class=\"chat-header\">"
+        "<div class=\"chat-title\">치과 안내 챗봇</div>"
+        "<button class=\"chat-close\" type=\"button\" aria-label=\"닫기\">×</button>"
+        "</div>"
+        "<div class=\"chat-disclaimer\">개인정보/증상은 입력하지 마세요. 진료 상담은 전화로 안내합니다.</div>"
+        "<div class=\"chat-body\" id=\"chat-body\" aria-live=\"polite\"></div>"
+        "<div class=\"chat-quick\">"
+        "<button type=\"button\" data-quick=\"hours\">진료시간</button>"
+        "<button type=\"button\" data-quick=\"parking\">주차</button>"
+        "<button type=\"button\" data-quick=\"reservation\">예약</button>"
+        "<button type=\"button\" data-quick=\"directions\">오시는 길</button>"
+        "</div>"
+        "<div class=\"chat-input\">"
+        "<input type=\"text\" placeholder=\"예: 주차 가능해요? / 진료시간 알려줘\">"
+        "<button type=\"button\" class=\"chat-send\">전송</button>"
+        "</div>"
+        f"{cta_html}"
+        "</div>"
+        "</div>"
+        "<script>"
+        "(function(){"
+        "var extraEl=document.getElementById('clinic-extra-json');"
+        "var widget=document.getElementById('chat-widget');"
+        "if(!extraEl||!widget){return;}"
+        "var extra;try{extra=JSON.parse(extraEl.textContent||'{}');}catch(e){return;}"
+        "var panel=widget.querySelector('.chat-panel');"
+        "var fab=widget.querySelector('.chat-fab');"
+        "var closeBtn=widget.querySelector('.chat-close');"
+        "var body=widget.querySelector('.chat-body');"
+        "var input=widget.querySelector('.chat-input input');"
+        "var sendBtn=widget.querySelector('.chat-send');"
+        "function addMessage(text, who){"
+        "var bubble=document.createElement('div');"
+        "bubble.className='chat-bubble '+who;"
+        "bubble.textContent=text;"
+        "body.appendChild(bubble);"
+        "body.scrollTop=body.scrollHeight;"
+        "}"
+        "function ensureIntro(){"
+        "if(body.getAttribute('data-init')){return;}"
+        "addMessage('안내 가능한 항목: 진료시간/주차/예약/오시는 길', 'bot');"
+        "body.setAttribute('data-init','1');"
+        "}"
+        "function toggle(open){"
+        "if(open){widget.classList.add('open');panel.setAttribute('aria-hidden','false');ensureIntro();input.focus();}"
+        "else{widget.classList.remove('open');panel.setAttribute('aria-hidden','true');}"
+        "}"
+        "fab.addEventListener('click', function(){toggle(!widget.classList.contains('open'));});"
+        "closeBtn.addEventListener('click', function(){toggle(false);});"
+        "function normalize(text){return (text||'').toLowerCase().replace(/[\\s\\p{P}\\p{S}]/gu,'');}"
+        "var medicalKeywords=['아파','통증','염증','피','부음','고름','시림','충치','임플란트','교정','신경치료','발치','사랑니','약','처방','진단','치료','비용','가격','얼마','보험','실비','CT','엑스레이'];"
+        "function containsMedical(text){return medicalKeywords.some(function(k){return text.indexOf(k)!==-1;});}"
+        "function containsPersonal(text){"
+        "if(/0\\d{1,2}[- ]?\\d{3,4}[- ]?\\d{4}/.test(text)){return true;}"
+        "if(/\\S+@\\S+\\.\\S+/.test(text)){return true;}"
+        "if(/\\d{6}[- ]?\\d{7}/.test(text)){return true;}"
+        "return false;"
+        "}"
+        "function unknownMessage(){"
+        "var msg=(extra.fallback&&extra.fallback.unknown)||'해당 문의는 페이지에 등록된 정보만으로는 확인이 어렵습니다.';"
+        "if(msg.indexOf('전화')===-1||msg.indexOf('지도')===-1){msg+=' 전화상담 또는 지도보기 버튼을 이용해주세요.';}"
+        "return msg;"
+        "}"
+        "function respond(text){addMessage(text,'bot');}"
+        "function scoreFaq(input, faqQ){"
+        "var inputN=normalize(input);"
+        "var faqN=normalize(faqQ);"
+        "if(!inputN||!faqN){return 0;}"
+        "var score=0;"
+        "if(inputN.indexOf(faqN)!==-1||faqN.indexOf(inputN)!==-1){score+=3;}"
+        "var tokens=faqQ.split(/\\s+/).filter(function(t){return t.length>=2;});"
+        "tokens.forEach(function(t){var tn=normalize(t);if(tn&&inputN.indexOf(tn)!==-1){score+=1;}});"
+        "return score;"
+        "}"
+        "function handleQuestion(text){"
+        "if(!text){return;}"
+        "addMessage(text,'user');"
+        "if(containsPersonal(text)){respond((extra.fallback&&extra.fallback.personal)||'개인정보는 입력하지 마세요. 전화로 문의해주세요.');return;}"
+        "if(containsMedical(text)){respond((extra.fallback&&extra.fallback.medical)||'의학적 상담은 이 채널에서 안내할 수 없습니다. 전화로 문의해주세요.');return;}"
+        "var quick=extra.quick_actions||{};"
+        "if(text.indexOf('진료시간')!==-1||text.indexOf('시간')!==-1){if(quick.hours){respond(quick.hours);return;}}"
+        "if(text.indexOf('주차')!==-1){if(quick.parking){respond(quick.parking);return;}}"
+        "if(text.indexOf('예약')!==-1){if(quick.reservation){respond(quick.reservation);return;}}"
+        "if(text.indexOf('오시는 길')!==-1||text.indexOf('위치')!==-1||text.indexOf('지도')!==-1){if(quick.directions){respond(quick.directions);return;}}"
+        "var faqs=Array.isArray(extra.faq)?extra.faq:[];"
+        "var best=null;var bestScore=0;"
+        "faqs.forEach(function(item){"
+        "var q=(item&&item.q)||'';var a=(item&&item.a)||'';"
+        "var score=scoreFaq(text,q);"
+        "if(score>bestScore){bestScore=score;best={a:a};}"
+        "});"
+        "if(best&&bestScore>=2&&best.a){respond(best.a);return;}"
+        "respond(unknownMessage());"
+        "}"
+        "sendBtn.addEventListener('click', function(){"
+        "var text=input.value.trim();"
+        "input.value='';"
+        "handleQuestion(text);"
+        "});"
+        "input.addEventListener('keydown', function(e){"
+        "if(e.key==='Enter'){e.preventDefault();sendBtn.click();}"
+        "});"
+        "widget.querySelectorAll('[data-quick]').forEach(function(btn){"
+        "btn.addEventListener('click', function(){"
+        "var key=btn.getAttribute('data-quick');"
+        "var quick=extra.quick_actions||{};"
+        "var map={hours:quick.hours,parking:quick.parking,reservation:quick.reservation,directions:quick.directions};"
+        "if(map[key]){respond(map[key]);}else{respond(unknownMessage());}"
+        "});"
+        "});"
+        "})();"
+        "</script>"
+    )
 
 def _render_page(cfg: AppConfig, title: str, body: str) -> str:
     safe_title = html.escape(title)
@@ -400,6 +559,26 @@ def _render_page(cfg: AppConfig, title: str, body: str) -> str:
         ".link-url{display:none}"
         ".empty-state{text-align:center;padding:60px 20px}"
         ".icon-area{font-size:2.5rem;font-weight:900;color:#e2e8f0;margin-bottom:20px}"
+        ".chat-widget{position:fixed;right:16px;bottom:16px;z-index:9999;font-size:14px}"
+        ".chat-fab{height:56px;padding:0 18px;border-radius:28px;background:var(--primary);color:#fff;border:none;font-weight:700;box-shadow:0 8px 16px rgba(15,23,42,0.2)}"
+        ".chat-panel{position:fixed;right:16px;bottom:84px;width:min(420px,calc(100vw - 32px));background:#fff;border:1px solid #e2e8f0;border-radius:16px;box-shadow:0 12px 24px rgba(15,23,42,0.18);display:none;flex-direction:column;overflow:hidden}"
+        ".chat-widget.open .chat-panel{display:flex}"
+        ".chat-header{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:#f8fafc;border-bottom:1px solid #e2e8f0}"
+        ".chat-title{font-weight:700;font-size:0.95rem;color:var(--text-main)}"
+        ".chat-close{border:none;background:transparent;font-size:20px;line-height:1;color:var(--text-light);cursor:pointer}"
+        ".chat-disclaimer{padding:8px 16px;font-size:0.75rem;color:var(--text-light);border-bottom:1px dashed #e2e8f0;background:#f8fafc}"
+        ".chat-body{padding:14px 16px;max-height:240px;overflow:auto;display:flex;flex-direction:column;gap:10px}"
+        ".chat-bubble{padding:10px 12px;border-radius:12px;font-size:0.85rem;line-height:1.4;max-width:85%}"
+        ".chat-bubble.bot{background:#f1f5f9;color:var(--text-main);align-self:flex-start;border:1px solid #e2e8f0}"
+        ".chat-bubble.user{background:#172554;color:#fff;align-self:flex-end}"
+        ".chat-quick{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;padding:0 16px 12px}"
+        ".chat-quick button{border:1px solid #cbd5e1;background:#fff;border-radius:8px;padding:8px 6px;font-size:0.8rem;font-weight:600;color:var(--text-main)}"
+        ".chat-input{display:flex;gap:8px;padding:0 16px 14px}"
+        ".chat-input input{flex:1;border:1px solid #cbd5e1;border-radius:10px;padding:10px;font-size:0.85rem}"
+        ".chat-send{border:none;background:var(--primary);color:#fff;border-radius:10px;padding:0 14px;font-weight:700}"
+        ".chat-cta{display:flex;gap:8px;padding:0 16px 16px}"
+        ".chat-cta-btn{flex:1;text-align:center;padding:10px;border-radius:10px;background:#f8fafc;border:1px solid #e2e8f0;font-size:0.8rem;font-weight:600;color:var(--text-sub)}"
+        ".chat-cta-btn:first-child{background:#172554;color:#fff;border-color:#172554}"
         "@media (max-width:340px){.cta-row{grid-template-columns:1fr}.cta-row > .btn:first-child{grid-column:auto}}"
     )
 
